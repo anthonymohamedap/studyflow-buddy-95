@@ -243,16 +243,67 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
         }
       } else {
         // Recurring: generate instances
-        let currentStart = eventStart;
         const recurrenceEnd = event.recurrence_end_date 
           ? parseISO(event.recurrence_end_date) 
           : addMonths(rangeEnd, 1);
+        
+        // Skip ahead to the first occurrence that could be in the range
+        let currentStart = eventStart;
+        
+        // If the original event starts before the range, calculate how many periods to skip
+        if (isBefore(eventStart, rangeStart)) {
+          const msPerDay = 24 * 60 * 60 * 1000;
+          const daysDiff = Math.floor((rangeStart.getTime() - eventStart.getTime()) / msPerDay);
+          
+          let periodsToSkip = 0;
+          switch (event.recurrence) {
+            case 'daily':
+              periodsToSkip = daysDiff;
+              break;
+            case 'weekly':
+              periodsToSkip = Math.floor(daysDiff / 7);
+              break;
+            case 'monthly':
+              periodsToSkip = Math.floor(daysDiff / 30);
+              break;
+          }
+          
+          // Apply the skip
+          switch (event.recurrence) {
+            case 'daily':
+              currentStart = addDays(eventStart, periodsToSkip);
+              break;
+            case 'weekly':
+              currentStart = addWeeks(eventStart, periodsToSkip);
+              break;
+            case 'monthly':
+              currentStart = addMonths(eventStart, periodsToSkip);
+              break;
+          }
+          
+          // If we're still before rangeStart after the skip, advance one more period
+          while (isBefore(currentStart, rangeStart)) {
+            switch (event.recurrence) {
+              case 'daily':
+                currentStart = addDays(currentStart, 1);
+                break;
+              case 'weekly':
+                currentStart = addWeeks(currentStart, 1);
+                break;
+              case 'monthly':
+                currentStart = addMonths(currentStart, 1);
+                break;
+            }
+          }
+        }
+        
         let instanceCount = 0;
-        const maxInstances = 365; // Safety limit
+        const maxInstances = 100; // Safety limit for visible instances
 
-        while (isBefore(currentStart, recurrenceEnd) && instanceCount < maxInstances) {
+        while (isBefore(currentStart, rangeEnd) && isBefore(currentStart, recurrenceEnd) && instanceCount < maxInstances) {
           const currentEnd = new Date(currentStart.getTime() + duration);
 
+          // Only add if within the display range
           if (
             isWithinInterval(currentStart, { start: rangeStart, end: rangeEnd }) ||
             isWithinInterval(currentEnd, { start: rangeStart, end: rangeEnd })
@@ -270,7 +321,7 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
               location: event.location,
               color: event.color,
               course_id: event.course_id,
-              isRecurrenceInstance: instanceCount > 0,
+              isRecurrenceInstance: currentStart.getTime() !== eventStart.getTime(),
               instanceDate: currentStart,
             });
           }
