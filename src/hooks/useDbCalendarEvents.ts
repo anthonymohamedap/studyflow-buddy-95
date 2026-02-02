@@ -67,7 +67,7 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // Fetch events for date range
+  // Fetch events for date range (including events that overlap with the range)
   const { data: events = [], isLoading, error } = useQuery({
     queryKey: ['calendar-events', user?.id, startDate?.toISOString(), endDate?.toISOString()],
     queryFn: async () => {
@@ -79,11 +79,12 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
         .eq('user_id', user.id)
         .order('start_date', { ascending: true });
 
-      // Optionally filter by date range
+      // Filter by date range - fetch events that OVERLAP with the range
+      // An event overlaps if: event.start_date <= range.end AND event.end_date >= range.start
       if (startDate && endDate) {
         query = query
-          .gte('start_date', startDate.toISOString())
-          .lte('end_date', endDate.toISOString());
+          .lte('start_date', endDate.toISOString())
+          .gte('end_date', startDate.toISOString());
       }
 
       const { data, error } = await query;
