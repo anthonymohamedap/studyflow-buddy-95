@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useCourses } from '@/hooks/useCourses';
+import { sampleCourses } from '@/data/sampleCourses';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,7 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Sparkles } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface AddCourseDialogProps {
   open: boolean;
@@ -57,6 +59,18 @@ export function AddCourseDialog({ open, onOpenChange }: AddCourseDialogProps) {
     });
   };
 
+  const handleImportAllCourses = async () => {
+    try {
+      for (const course of sampleCourses) {
+        await createCourse.mutateAsync(course);
+      }
+      toast.success(`Imported ${sampleCourses.length} courses from syllabi!`);
+      onOpenChange(false);
+    } catch (error) {
+      toast.error('Failed to import some courses');
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
@@ -64,8 +78,18 @@ export function AddCourseDialog({ open, onOpenChange }: AddCourseDialogProps) {
           <DialogHeader>
             <DialogTitle>Add New Course</DialogTitle>
             <DialogDescription>
-              Enter the details for your new OLOD/course
+              Enter the details for your new OLOD/course, or import all courses from your syllabi
             </DialogDescription>
+            <Button 
+              type="button" 
+              variant="secondary" 
+              onClick={handleImportAllCourses}
+              disabled={createCourse.isPending}
+              className="mt-2 gap-2"
+            >
+              <Sparkles className="h-4 w-4" />
+              Import All 6 Courses from Syllabi
+            </Button>
           </DialogHeader>
 
           <div className="grid gap-4 py-4">
