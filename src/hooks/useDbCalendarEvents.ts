@@ -80,11 +80,12 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
         .order('start_date', { ascending: true });
 
       // Filter by date range - fetch events that OVERLAP with the range
-      // An event overlaps if: event.start_date <= range.end AND event.end_date >= range.start
+      // For recurring events, we also need to fetch events where recurrence_end_date >= range.start
+      // An event overlaps if: event.start_date <= range.end AND (event.end_date >= range.start OR recurrence_end_date >= range.start)
       if (startDate && endDate) {
         query = query
           .lte('start_date', endDate.toISOString())
-          .gte('end_date', startDate.toISOString());
+          .or(`end_date.gte.${startDate.toISOString()},recurrence_end_date.gte.${startDate.toISOString()}`);
       }
 
       const { data, error } = await query;
