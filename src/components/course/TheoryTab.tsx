@@ -3,8 +3,7 @@ import { useTheoryTopics } from '@/hooks/useTheoryTopics';
 import { supabase } from '@/integrations/supabase/client';
 import { datastructuresTheoryTopics } from '@/data/sampleTheoryTopics';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -25,54 +24,19 @@ import {
 import { 
   Plus, 
   BookOpen, 
-  Video, 
-  FileText, 
-  Link2, 
-  Eye,
-  CheckCircle2,
-  Circle,
-  Star,
-  Trash2,
-  ExternalLink,
   Upload,
-  File,
+  Trash2,
   Loader2,
   Sparkles
 } from 'lucide-react';
 import { toast } from 'sonner';
+import { TheoryTopicCard } from './TheoryTopicCard';
 
 interface TheoryTabProps {
   courseId: string;
 }
 
-const STATUS_CONFIG = {
-  NOT_VIEWED: { 
-    icon: Circle, 
-    label: 'Not Viewed', 
-    className: 'text-muted-foreground bg-muted',
-    badgeClass: 'bg-muted text-muted-foreground'
-  },
-  REVIEWED: { 
-    icon: Eye, 
-    label: 'Reviewed', 
-    className: 'text-warning bg-warning/10',
-    badgeClass: 'bg-warning/20 text-warning'
-  },
-  MASTERED: { 
-    icon: Star, 
-    label: 'Mastered', 
-    className: 'text-success bg-success/10',
-    badgeClass: 'bg-success/20 text-success'
-  },
-};
-
-const SOURCE_ICONS = {
-  SLIDES: FileText,
-  GITBOOK: BookOpen,
-  VIDEO: Video,
-  PDF: FileText,
-  OTHER: Link2,
-};
+// Status and source config moved to TheoryTopicCard component
 
 export function TheoryTab({ courseId }: TheoryTabProps) {
   const { topics, isLoading, createTopic, updateTopic, deleteTopic } = useTheoryTopics(courseId);
@@ -241,72 +205,14 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
                 {week === 0 ? 'Unassigned' : `Week ${week}`}
               </h4>
               <div className="space-y-3">
-                {topicsByWeek[week].map((topic) => {
-                  const status = STATUS_CONFIG[topic.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.NOT_VIEWED;
-                  const StatusIcon = status.icon;
-                  const SourceIcon = SOURCE_ICONS[topic.source_type as keyof typeof SOURCE_ICONS] || Link2;
-
-                  return (
-                    <Card key={topic.id} className="shadow-soft hover:shadow-glow transition-shadow">
-                      <CardContent className="p-4">
-                        <div className="flex items-start gap-4">
-                          <button
-                            onClick={() => {
-                              const nextStatus = topic.status === 'NOT_VIEWED' 
-                                ? 'REVIEWED' 
-                                : topic.status === 'REVIEWED' 
-                                  ? 'MASTERED' 
-                                  : 'NOT_VIEWED';
-                              handleStatusChange(topic.id, nextStatus);
-                            }}
-                            className={`w-10 h-10 rounded-lg flex items-center justify-center transition-colors ${status.className}`}
-                          >
-                            <StatusIcon className="h-5 w-5" />
-                          </button>
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <div>
-                                <h4 className="font-medium">{topic.title}</h4>
-                                <div className="flex items-center gap-2 mt-1">
-                                  <Badge variant="outline" className="text-xs">
-                                    <SourceIcon className="h-3 w-3 mr-1" />
-                                    {topic.source_type}
-                                  </Badge>
-                                  <Badge className={`text-xs ${status.badgeClass}`}>
-                                    {status.label}
-                                  </Badge>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                {topic.source_url && (
-                                  <a href={topic.source_url} target="_blank" rel="noopener noreferrer">
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                      <ExternalLink className="h-4 w-4" />
-                                    </Button>
-                                  </a>
-                                )}
-                                <Button 
-                                  variant="ghost" 
-                                  size="icon" 
-                                  className="h-8 w-8 text-destructive hover:text-destructive"
-                                  onClick={() => deleteTopic.mutate(topic.id)}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                            {topic.personal_summary && (
-                              <p className="text-sm text-muted-foreground mt-2 border-l-2 border-primary/30 pl-3">
-                                {topic.personal_summary}
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+                {topicsByWeek[week].map((topic) => (
+                  <TheoryTopicCard
+                    key={topic.id}
+                    topic={topic}
+                    onStatusChange={handleStatusChange}
+                    onDelete={(id) => deleteTopic.mutate(id)}
+                  />
+                ))}
               </div>
             </div>
           ))}
