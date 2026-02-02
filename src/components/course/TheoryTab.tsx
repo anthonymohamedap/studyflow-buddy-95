@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useTheoryTopics } from '@/hooks/useTheoryTopics';
+import { supabase } from '@/integrations/supabase/client';
+import { datastructuresTheoryTopics } from '@/data/sampleTheoryTopics';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,8 +33,13 @@ import {
   Circle,
   Star,
   Trash2,
-  ExternalLink
+  ExternalLink,
+  Upload,
+  File,
+  Loader2,
+  Sparkles
 } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface TheoryTabProps {
   courseId: string;
@@ -70,6 +77,9 @@ const SOURCE_ICONS = {
 export function TheoryTab({ courseId }: TheoryTabProps) {
   const { topics, isLoading, createTopic, updateTopic, deleteTopic } = useTheoryTopics(courseId);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [newTopic, setNewTopic] = useState({
     title: '',
     source_type: 'SLIDES' as 'SLIDES' | 'GITBOOK' | 'VIDEO' | 'PDF' | 'OTHER',
@@ -78,20 +88,90 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
     personal_summary: '',
   });
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      // Auto-set title from filename if empty
+      if (!newTopic.title) {
+        const name = file.name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ');
+        setNewTopic(prev => ({ ...prev, title: name }));
+      }
+      // Auto-detect source type from extension
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') {
+        setNewTopic(prev => ({ ...prev, source_type: 'PDF' }));
+      }
+    }
+  };
+
+  const uploadFile = async (file: File): Promise<string | null> => {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${courseId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    
+    const { error } = await supabase.storage
+      .from('course-materials')
+      .upload(fileName, file);
+    
+    if (error) {
+      toast.error('Failed to upload file: ' + error.message);
+      return null;
+    }
+    
+    const { data: urlData } = supabase.storage
+      .from('course-materials')
+      .getPublicUrl(fileName);
+    
+    return urlData.publicUrl;
+  };
+
   const handleAddTopic = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createTopic.mutateAsync({
-      course_id: courseId,
-      ...newTopic,
-    });
-    setShowAddDialog(false);
-    setNewTopic({
-      title: '',
-      source_type: 'SLIDES',
-      source_url: '',
-      week_number: 1,
-      personal_summary: '',
-    });
+    setUploadingFile(true);
+    
+    try {
+      let fileUrl = newTopic.source_url;
+      
+      // Upload file if selected
+      if (selectedFile) {
+        const uploadedUrl = await uploadFile(selectedFile);
+        if (uploadedUrl) {
+          fileUrl = uploadedUrl;
+        }
+      }
+      
+      await createTopic.mutateAsync({
+        course_id: courseId,
+        ...newTopic,
+        source_url: fileUrl,
+      });
+      
+      setShowAddDialog(false);
+      setSelectedFile(null);
+      setNewTopic({
+        title: '',
+        source_type: 'SLIDES',
+        source_url: '',
+        week_number: 1,
+        personal_summary: '',
+      });
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleImportSampleTopics = async () => {
+    try {
+      for (const topic of datastructuresTheoryTopics) {
+        await createTopic.mutateAsync({
+          course_id: courseId,
+          ...topic,
+        });
+      }
+      toast.success(`Imported ${datastructuresTheoryTopics.length} theory topics!`);
+    } catch (error) {
+      toast.error('Failed to import some topics');
+    }
   };
 
   const handleStatusChange = async (topicId: string, newStatus: 'NOT_VIEWED' | 'REVIEWED' | 'MASTERED') => {
@@ -119,10 +199,18 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
           <h3 className="text-lg font-semibold">Theory Topics</h3>
           <p className="text-sm text-muted-foreground">Track your understanding of course material</p>
         </div>
-        <Button onClick={() => setShowAddDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Topic
-        </Button>
+        <div className="flex gap-2">
+          {topics.length === 0 && (
+            <Button variant="secondary" onClick={handleImportSampleTopics} disabled={createTopic.isPending}>
+              <Sparkles className="h-4 w-4 mr-2" />
+              Import Sample Topics
+            </Button>
+          )}
+          <Button onClick={() => setShowAddDialog(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Topic
+          </Button>
+        </div>
       </div>
 
       {topics.length === 0 ? (
@@ -133,10 +221,16 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
             <p className="text-sm text-muted-foreground text-center mb-4">
               Add topics from your course syllabus to track your progress
             </p>
-            <Button onClick={() => setShowAddDialog(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Add First Topic
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="secondary" onClick={handleImportSampleTopics} disabled={createTopic.isPending}>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Import from Syllabi
+              </Button>
+              <Button onClick={() => setShowAddDialog(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Add First Topic
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : (
@@ -271,6 +365,38 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
                 </div>
               </div>
               <div className="space-y-2">
+                <Label>Upload Document</Label>
+                <div className="flex gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".pdf,.pptx,.ppt,.docx,.doc"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex-1"
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {selectedFile ? selectedFile.name : 'Choose File'}
+                  </Button>
+                  {selectedFile && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSelectedFile(null)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Or enter a URL below</p>
+              </div>
+              <div className="space-y-2">
                 <Label htmlFor="source_url">Source URL</Label>
                 <Input
                   id="source_url"
@@ -278,6 +404,7 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
                   value={newTopic.source_url}
                   onChange={(e) => setNewTopic({ ...newTopic, source_url: e.target.value })}
                   placeholder="https://..."
+                  disabled={!!selectedFile}
                 />
               </div>
               <div className="space-y-2">
@@ -295,8 +422,15 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
               <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={createTopic.isPending}>
-                Add Topic
+              <Button type="submit" disabled={createTopic.isPending || uploadingFile}>
+                {uploadingFile ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  'Add Topic'
+                )}
               </Button>
             </DialogFooter>
           </form>

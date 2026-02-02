@@ -207,6 +207,7 @@ export type Database = {
         Row: {
           course_id: string
           created_at: string
+          file_path: string | null
           id: string
           personal_summary: string | null
           sort_order: number | null
@@ -220,6 +221,7 @@ export type Database = {
         Insert: {
           course_id: string
           created_at?: string
+          file_path?: string | null
           id?: string
           personal_summary?: string | null
           sort_order?: number | null
@@ -233,6 +235,7 @@ export type Database = {
         Update: {
           course_id?: string
           created_at?: string
+          file_path?: string | null
           id?: string
           personal_summary?: string | null
           sort_order?: number | null
