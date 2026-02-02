@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { 
   format, 
   addWeeks, 
@@ -8,7 +8,11 @@ import {
   addYears,
   subYears,
   startOfWeek,
-  endOfWeek
+  endOfWeek,
+  startOfMonth,
+  endOfMonth,
+  setHours,
+  setMinutes
 } from 'date-fns';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
@@ -16,13 +20,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Popover,
   PopoverContent,
@@ -43,7 +40,8 @@ import {
   FolderKanban,
   Clock,
   GraduationCap,
-  Plus
+  Plus,
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { WeekView } from './WeekView';
@@ -52,11 +50,13 @@ import { YearView } from './YearView';
 import { MiniCalendar } from './MiniCalendar';
 import { SmartPlanner } from './SmartPlanner';
 import { CalendarEventDialog, type CalendarEventFormData } from './CalendarEventDialog';
+import { EnhancedEventDialog } from './EnhancedEventDialog';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
+import { useDbCalendarEvents, type ExpandedCalendarEvent, type CalendarEventFormData as DbEventFormData } from '@/hooks/useDbCalendarEvents';
+import { useAuth } from '@/contexts/AuthContext';
 import { 
   ACADEMIC_EVENTS,
   getSemesterWeek,
-  ACADEMIC_YEAR_2025_2026,
   type ScheduleBlock
 } from '@/data/academicCalendar';
 import type { CalendarViewMode } from '@/types/calendar';
@@ -82,20 +82,53 @@ export function SmartCalendar({
   deliverables = [],
   defaultExpanded = true 
 }: SmartCalendarProps) {
+  const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('week');
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [showSmartPlanner, setShowSmartPlanner] = useState(true);
   
-  // CRUD dialog state
-  const [eventDialogOpen, setEventDialogOpen] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState<ScheduleBlock | null>(null);
+  // Legacy CRUD dialog state (for schedule blocks)
+  const [legacyDialogOpen, setLegacyDialogOpen] = useState(false);
+  const [selectedScheduleEvent, setSelectedScheduleEvent] = useState<ScheduleBlock | null>(null);
   const [selectedDay, setSelectedDay] = useState<number | undefined>();
   const [selectedTime, setSelectedTime] = useState<string | undefined>();
   
-  // Calendar events hook
-  const { scheduleBlocks, saveEvent, deleteEvent } = useCalendarEvents();
+  // New database event dialog state
+  const [dbEventDialogOpen, setDbEventDialogOpen] = useState(false);
+  const [selectedDbEvent, setSelectedDbEvent] = useState<ExpandedCalendarEvent | null>(null);
+  const [selectedEventDate, setSelectedEventDate] = useState<Date | undefined>();
+  const [selectedEventTime, setSelectedEventTime] = useState<string | undefined>();
+  
+  // Legacy calendar events hook (for schedule blocks)
+  const { scheduleBlocks, saveEvent: saveLegacyEvent, deleteEvent: deleteLegacyEvent } = useCalendarEvents();
+  
+  // Calculate date range for database query
+  const dateRange = useMemo(() => {
+    const start = viewMode === 'year' 
+      ? new Date('2025-09-01')
+      : viewMode === 'month' 
+        ? startOfMonth(selectedDate)
+        : startOfWeek(selectedDate, { weekStartsOn: 1 });
+    const end = viewMode === 'year'
+      ? new Date('2026-09-01')
+      : viewMode === 'month'
+        ? endOfMonth(selectedDate)
+        : endOfWeek(selectedDate, { weekStartsOn: 1 });
+    return { start, end };
+  }, [selectedDate, viewMode]);
+  
+  // Database calendar events hook
+  const { 
+    expandedEvents: dbEvents,
+    isLoading: isLoadingEvents,
+    saveEvent: saveDbEvent,
+    deleteEvent: deleteDbEvent,
+    isCreating,
+    isUpdating,
+    isDeleting
+  } = useDbCalendarEvents(dateRange.start, dateRange.end);
 
   const { semester, week } = getSemesterWeek(selectedDate);
 
@@ -121,38 +154,69 @@ export function SmartCalendar({
 
   // Generate ICS for all deadlines
   const generateICS = useCallback(() => {
-    const events: Array<{ id: string; title: string; date: string }> = [];
+    const events: Array<{ id: string; title: string; date: string; endDate?: string; allDay?: boolean }> = [];
     
     exercises.forEach(ex => {
       if (ex.deadline) {
-        events.push({ id: ex.id, title: ex.title, date: ex.deadline });
+        events.push({ id: ex.id, title: ex.title, date: ex.deadline, allDay: true });
       }
     });
     
     if (project?.deadline) {
-      events.push({ id: project.id, title: project.title, date: project.deadline });
+      events.push({ id: project.id, title: project.title, date: project.deadline, allDay: true });
     }
     
     deliverables.forEach(del => {
       if (del.deadline) {
-        events.push({ id: del.id, title: del.title, date: del.deadline });
+        events.push({ id: del.id, title: del.title, date: del.deadline, allDay: true });
       }
     });
 
     // Add academic events
     ACADEMIC_EVENTS.forEach(event => {
-      events.push({ id: event.id, title: event.titleNL || event.title, date: event.startDate });
+      events.push({ 
+        id: event.id, 
+        title: event.titleNL || event.title, 
+        date: event.startDate,
+        endDate: event.endDate,
+        allDay: true
+      });
+    });
+
+    // Add database events
+    dbEvents.forEach(event => {
+      events.push({
+        id: event.id,
+        title: event.title,
+        date: event.start_date.toISOString(),
+        endDate: event.end_date.toISOString(),
+        allDay: event.all_day
+      });
     });
 
     const icsEvents = events.map((event) => {
-      const dateStr = format(new Date(event.date), "yyyyMMdd");
-      return `BEGIN:VEVENT
+      const startDate = new Date(event.date);
+      const endDate = event.endDate ? new Date(event.endDate) : startDate;
+      
+      if (event.allDay) {
+        const dateStr = format(startDate, "yyyyMMdd");
+        const endDateStr = format(endDate, "yyyyMMdd");
+        return `BEGIN:VEVENT
 UID:${event.id}@studyflow
 DTSTAMP:${format(new Date(), "yyyyMMdd'T'HHmmss'Z'")}
 DTSTART;VALUE=DATE:${dateStr}
-DTEND;VALUE=DATE:${dateStr}
+DTEND;VALUE=DATE:${endDateStr}
 SUMMARY:${event.title}
 END:VEVENT`;
+      } else {
+        return `BEGIN:VEVENT
+UID:${event.id}@studyflow
+DTSTAMP:${format(new Date(), "yyyyMMdd'T'HHmmss'Z'")}
+DTSTART:${format(startDate, "yyyyMMdd'T'HHmmss")}
+DTEND:${format(endDate, "yyyyMMdd'T'HHmmss")}
+SUMMARY:${event.title}
+END:VEVENT`;
+      }
     }).join('\n');
 
     const icsContent = `BEGIN:VCALENDAR
@@ -174,7 +238,7 @@ END:VCALENDAR`;
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
     toast.success('Calendar downloaded! Open it to add to your calendar app.');
-  }, [exercises, project, deliverables]);
+  }, [exercises, project, deliverables, dbEvents]);
 
   // Get view title
   const getViewTitle = () => {
@@ -192,6 +256,32 @@ END:VCALENDAR`;
     }
   };
 
+  // Handle adding a new database event
+  const handleAddDbEvent = useCallback((date: Date, time?: string) => {
+    setSelectedDbEvent(null);
+    setSelectedEventDate(date);
+    setSelectedEventTime(time);
+    setDbEventDialogOpen(true);
+  }, []);
+
+  // Handle editing a database event
+  const handleEditDbEvent = useCallback((event: ExpandedCalendarEvent) => {
+    setSelectedDbEvent(event);
+    setSelectedEventDate(undefined);
+    setSelectedEventTime(undefined);
+    setDbEventDialogOpen(true);
+  }, []);
+
+  // Handle saving a database event
+  const handleSaveDbEvent = useCallback(async (data: DbEventFormData) => {
+    await saveDbEvent(data);
+  }, [saveDbEvent]);
+
+  // Handle deleting a database event
+  const handleDeleteDbEvent = useCallback(async (id: string) => {
+    await deleteDbEvent(id);
+  }, [deleteDbEvent]);
+
   // Collapsed view
   if (!isExpanded) {
     return (
@@ -206,6 +296,7 @@ END:VCALENDAR`;
               <div className="flex items-center gap-2">
                 <CalendarIcon className="h-5 w-5 text-primary" />
                 <span className="font-medium">Calendar</span>
+                {isLoadingEvents && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               </div>
               <Button variant="ghost" size="sm" onClick={() => setIsExpanded(true)}>
                 <Maximize2 className="h-4 w-4" />
@@ -224,6 +315,8 @@ END:VCALENDAR`;
     );
   }
 
+  const isAuthenticated = !!user;
+
   // Expanded view
   return (
     <motion.div
@@ -241,9 +334,13 @@ END:VCALENDAR`;
                 <GraduationCap className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
-                <CardTitle className="text-xl">Smart Calendar</CardTitle>
+                <CardTitle className="text-xl flex items-center gap-2">
+                  Smart Calendar
+                  {isLoadingEvents && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                </CardTitle>
                 <p className="text-sm text-muted-foreground">
                   Semester {semester} • Week {week}
+                  {dbEvents.length > 0 && ` • ${dbEvents.length} events`}
                 </p>
               </div>
             </div>
@@ -340,12 +437,8 @@ END:VCALENDAR`;
               {/* Add Event */}
               <Button 
                 size="sm" 
-                onClick={() => {
-                  setSelectedEvent(null);
-                  setSelectedDay(undefined);
-                  setSelectedTime(undefined);
-                  setEventDialogOpen(true);
-                }}
+                onClick={() => handleAddDbEvent(selectedDate)}
+                disabled={!isAuthenticated}
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Add Event
@@ -387,6 +480,15 @@ END:VCALENDAR`;
         </CardContent>
       </Card>
 
+      {/* Not authenticated warning */}
+      {!isAuthenticated && (
+        <Card className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+          <CardContent className="p-4 text-sm text-amber-700 dark:text-amber-300">
+            Sign in to create and save personal events to your calendar.
+          </CardContent>
+        </Card>
+      )}
+
       {/* Main Content */}
       <div className={cn(
         "grid gap-4",
@@ -411,17 +513,20 @@ END:VCALENDAR`;
                 courseFilter={selectedCourses.length > 0 ? selectedCourses : undefined}
                 scheduleBlocks={scheduleBlocks}
                 onAddEvent={(day, time) => {
-                  setSelectedEvent(null);
+                  setSelectedScheduleEvent(null);
                   setSelectedDay(day);
                   setSelectedTime(time);
-                  setEventDialogOpen(true);
+                  setLegacyDialogOpen(true);
                 }}
                 onEditEvent={(event) => {
-                  setSelectedEvent(event);
+                  setSelectedScheduleEvent(event);
                   setSelectedDay(undefined);
                   setSelectedTime(undefined);
-                  setEventDialogOpen(true);
+                  setLegacyDialogOpen(true);
                 }}
+                dbEvents={dbEvents}
+                onAddDbEvent={isAuthenticated ? handleAddDbEvent : undefined}
+                onEditDbEvent={isAuthenticated ? handleEditDbEvent : undefined}
               />
             )}
             {viewMode === 'month' && (
@@ -506,9 +611,9 @@ END:VCALENDAR`;
             </div>
             <div>
               <p className="text-2xl font-bold">
-                {exercises.filter(e => e.deadline && new Date(e.deadline) > new Date()).length}
+                {dbEvents.length}
               </p>
-              <p className="text-xs text-muted-foreground">Upcoming</p>
+              <p className="text-xs text-muted-foreground">Events</p>
             </div>
           </CardContent>
         </Card>
@@ -527,15 +632,27 @@ END:VCALENDAR`;
         </Card>
       </div>
 
-      {/* CRUD Dialog */}
+      {/* Legacy CRUD Dialog (for schedule blocks) */}
       <CalendarEventDialog
-        open={eventDialogOpen}
-        onOpenChange={setEventDialogOpen}
-        event={selectedEvent}
+        open={legacyDialogOpen}
+        onOpenChange={setLegacyDialogOpen}
+        event={selectedScheduleEvent}
         selectedDay={selectedDay}
         selectedTime={selectedTime}
-        onSave={saveEvent}
-        onDelete={deleteEvent}
+        onSave={saveLegacyEvent}
+        onDelete={deleteLegacyEvent}
+      />
+
+      {/* Enhanced Event Dialog (for database events) */}
+      <EnhancedEventDialog
+        open={dbEventDialogOpen}
+        onOpenChange={setDbEventDialogOpen}
+        event={selectedDbEvent}
+        selectedDate={selectedEventDate}
+        selectedTime={selectedEventTime}
+        onSave={handleSaveDbEvent}
+        onDelete={handleDeleteDbEvent}
+        isLoading={isCreating || isUpdating || isDeleting}
       />
     </motion.div>
   );

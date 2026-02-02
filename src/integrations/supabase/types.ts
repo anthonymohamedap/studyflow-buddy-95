@@ -14,6 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
+      calendar_events: {
+        Row: {
+          all_day: boolean
+          category: string
+          color: string | null
+          course_id: string | null
+          created_at: string
+          description: string | null
+          end_date: string
+          event_type: string
+          id: string
+          location: string | null
+          recurrence: string | null
+          recurrence_end_date: string | null
+          start_date: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          all_day?: boolean
+          category: string
+          color?: string | null
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          end_date: string
+          event_type: string
+          id?: string
+          location?: string | null
+          recurrence?: string | null
+          recurrence_end_date?: string | null
+          start_date: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          all_day?: boolean
+          category?: string
+          color?: string | null
+          course_id?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string
+          event_type?: string
+          id?: string
+          location?: string | null
+          recurrence?: string | null
+          recurrence_end_date?: string | null
+          start_date?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           ai_policy: Database["public"]["Enums"]["ai_policy"]
