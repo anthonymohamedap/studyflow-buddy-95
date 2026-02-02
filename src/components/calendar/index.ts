@@ -4,3 +4,5 @@ export { MonthView } from './MonthView';
 export { YearView } from './YearView';
 export { MiniCalendar } from './MiniCalendar';
 export { SmartPlanner } from './SmartPlanner';
+export { CalendarEventDialog } from './CalendarEventDialog';
+export type { CalendarEventFormData } from './CalendarEventDialog';
