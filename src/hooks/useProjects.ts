@@ -160,3 +160,28 @@ export function useTodoItems(projectId: string | undefined) {
     deleteTodo,
   };
 }
+
+export function useDeliverables(projectId: string | undefined) {
+  const queryClient = useQueryClient();
+
+  const deliverablesQuery = useQuery({
+    queryKey: ['deliverables', projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const { data, error } = await supabase
+        .from('deliverables')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('deadline', { ascending: true });
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!projectId,
+  });
+
+  return {
+    deliverables: deliverablesQuery.data ?? [],
+    isLoading: deliverablesQuery.isLoading,
+  };
+}

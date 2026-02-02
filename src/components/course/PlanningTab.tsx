@@ -1,12 +1,16 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useExercises } from '@/hooks/useExercises';
+import { useProject, useDeliverables } from '@/hooks/useProjects';
+import { useCourse } from '@/hooks/useCourses';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
+import { CourseCalendar } from './CourseCalendar';
 import { 
   Calendar,
   Clock,
@@ -28,6 +32,11 @@ interface PlanningTabProps {
 
 export function PlanningTab({ courseId }: PlanningTabProps) {
   const queryClient = useQueryClient();
+  const { data: course } = useCourse(courseId);
+  const { exercises } = useExercises(courseId);
+  const { project } = useProject(courseId);
+  const { deliverables } = useDeliverables(project?.id);
+  
   const [currentWeek, setCurrentWeek] = useState(() => {
     // Calculate current academic week (roughly)
     const now = new Date();
@@ -326,6 +335,14 @@ export function PlanningTab({ courseId }: PlanningTabProps) {
           Save Week Plan
         </Button>
       </div>
+
+      {/* Course Calendar with iPhone Sync */}
+      <CourseCalendar
+        courseName={course?.name || 'Course'}
+        exercises={exercises}
+        project={project}
+        deliverables={deliverables}
+      />
     </div>
   );
 }
