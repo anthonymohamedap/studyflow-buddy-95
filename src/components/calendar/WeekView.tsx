@@ -10,8 +10,9 @@ import {
 } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Plus, Pencil, CalendarOff } from 'lucide-react';
 import { 
-  SAMPLE_WEEKLY_SCHEDULE, 
   ACADEMIC_EVENTS,
   EVENT_COLORS,
   isHoliday,
@@ -34,6 +35,9 @@ interface WeekViewProps {
   deliverables?: Deliverable[];
   onDateSelect?: (date: Date) => void;
   courseFilter?: string[];
+  scheduleBlocks?: ScheduleBlock[];
+  onAddEvent?: (day: number, time: string) => void;
+  onEditEvent?: (event: ScheduleBlock) => void;
 }
 
 const TIME_SLOTS = Array.from({ length: 13 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
@@ -45,19 +49,39 @@ export function WeekView({
   project, 
   deliverables = [],
   onDateSelect,
-  courseFilter 
+  courseFilter,
+  scheduleBlocks = [],
+  onAddEvent,
+  onEditEvent
 }: WeekViewProps) {
+  const [hoveredSlot, setHoveredSlot] = useState<string | null>(null);
+  
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: addDays(weekEnd, -1) }); // Mon-Sat
 
-  // Filter schedule blocks by course if filter is applied
+  // Filter schedule blocks by course if filter is applied, and exclude vacation days
   const filteredSchedule = useMemo(() => {
-    if (!courseFilter || courseFilter.length === 0) return SAMPLE_WEEKLY_SCHEDULE;
-    return SAMPLE_WEEKLY_SCHEDULE.filter(block => 
-      courseFilter.some(c => block.courseName.toLowerCase().includes(c.toLowerCase()))
-    );
-  }, [courseFilter]);
+    let filtered = scheduleBlocks;
+    
+    if (courseFilter && courseFilter.length > 0) {
+      filtered = filtered.filter(block => 
+        courseFilter.some(c => block.courseName.toLowerCase().includes(c.toLowerCase()))
+      );
+    }
+    
+    return filtered;
+  }, [scheduleBlocks, courseFilter]);
+
+  // Get schedule for a specific day, respecting vacation periods
+  const getScheduleForDay = (dayDate: Date, dayIndex: number): ScheduleBlock[] => {
+    // If it's a holiday, return empty (no courses during vacation)
+    if (isHoliday(dayDate)) {
+      return [];
+    }
+    
+    return filteredSchedule.filter(block => block.dayOfWeek === dayIndex + 1);
+  };
 
   // Build events for the week
   const weekEvents = useMemo(() => {
@@ -115,17 +139,6 @@ export function WeekView({
     return events;
   }, [exercises, project, deliverables, weekStart, weekEnd]);
 
-  // Get schedule blocks for a specific day and time
-  const getBlocksForSlot = (dayIndex: number, time: string): ScheduleBlock[] => {
-    const hour = parseInt(time.split(':')[0]);
-    return filteredSchedule.filter(block => {
-      if (block.dayOfWeek !== dayIndex + 1) return false; // dayOfWeek is 1-indexed (Mon=1)
-      const blockStartHour = parseInt(block.startTime.split(':')[0]);
-      const blockEndHour = parseInt(block.endTime.split(':')[0]);
-      return hour >= blockStartHour && hour < blockEndHour;
-    });
-  };
-
   // Get block height based on duration
   const getBlockStyle = (block: ScheduleBlock) => {
     const startHour = parseInt(block.startTime.split(':')[0]);
@@ -147,6 +160,16 @@ export function WeekView({
     return hour === blockStartHour;
   };
 
+  // Get schedule blocks for a specific day and time
+  const getBlocksForSlot = (dayBlocks: ScheduleBlock[], time: string): ScheduleBlock[] => {
+    const hour = parseInt(time.split(':')[0]);
+    return dayBlocks.filter(block => {
+      const blockStartHour = parseInt(block.startTime.split(':')[0]);
+      const blockEndHour = parseInt(block.endTime.split(':')[0]);
+      return hour >= blockStartHour && hour < blockEndHour;
+    });
+  };
+
   const getTypeColor = (type: string) => {
     return EVENT_COLORS[type as keyof typeof EVENT_COLORS] || EVENT_COLORS.theory;
   };
@@ -166,7 +189,7 @@ export function WeekView({
             <div 
               key={i} 
               className={cn(
-                "p-3 text-center border-l cursor-pointer hover:bg-muted/50 transition-colors",
+                "p-3 text-center border-l cursor-pointer hover:bg-muted/50 transition-colors relative",
                 dayHoliday && "bg-muted/50",
                 dayExam && "bg-rose-50 dark:bg-rose-950/20",
                 isToday && "bg-primary/5"
@@ -181,6 +204,14 @@ export function WeekView({
                 {format(day, 'd')}
               </div>
               <div className="text-xs text-muted-foreground">{format(day, 'MMM')}</div>
+              
+              {/* Holiday indicator */}
+              {dayHoliday && (
+                <div className="absolute top-1 right-1">
+                  <CalendarOff className="h-3 w-3 text-muted-foreground" />
+                </div>
+              )}
+              
               {academicEvents.length > 0 && (
                 <div className="mt-1 flex justify-center gap-0.5">
                   {academicEvents.slice(0, 2).map((event) => (
@@ -246,6 +277,8 @@ export function WeekView({
             const dayHoliday = isHoliday(day);
             const dayExam = isExamPeriod(day);
             const renderedBlocks = new Set<string>();
+            const dayBlocks = getScheduleForDay(day, dayIndex);
+            const holidayEvent = getEventsForDate(day).find(e => e.type === 'holiday' || e.type === 'bridge_day');
 
             return (
               <div 
@@ -256,11 +289,51 @@ export function WeekView({
                   dayExam && "bg-rose-50/50 dark:bg-rose-950/10"
                 )}
               >
+                {/* Holiday overlay */}
+                {dayHoliday && holidayEvent && (
+                  <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+                    <div className="bg-muted/80 dark:bg-muted/60 px-3 py-2 rounded-lg shadow-sm text-center">
+                      <CalendarOff className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+                      <p className="text-xs font-medium text-muted-foreground">
+                        {holidayEvent.titleNL || holidayEvent.title}
+                      </p>
+                    </div>
+                  </div>
+                )}
+                
                 {TIME_SLOTS.map((time) => {
-                  const blocks = getBlocksForSlot(dayIndex, time);
+                  const blocks = getBlocksForSlot(dayBlocks, time);
+                  const slotKey = `${dayIndex}-${time}`;
+                  const isHovered = hoveredSlot === slotKey;
                   
                   return (
-                    <div key={time} className="h-12 relative">
+                    <div 
+                      key={time} 
+                      className={cn(
+                        "h-12 relative group",
+                        !dayHoliday && "cursor-pointer hover:bg-muted/20"
+                      )}
+                      onMouseEnter={() => !dayHoliday && setHoveredSlot(slotKey)}
+                      onMouseLeave={() => setHoveredSlot(null)}
+                      onClick={() => {
+                        if (!dayHoliday && blocks.length === 0 && onAddEvent) {
+                          onAddEvent(dayIndex + 1, time);
+                        }
+                      }}
+                    >
+                      {/* Add button on hover for empty slots */}
+                      {isHovered && blocks.length === 0 && onAddEvent && !dayHoliday && (
+                        <div className="absolute inset-0 flex items-center justify-center z-10">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 opacity-60 hover:opacity-100"
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                      
                       {blocks.map((block) => {
                         // Only render at the start slot
                         if (!isStartSlot(block, time) || renderedBlocks.has(block.id)) {
@@ -274,7 +347,7 @@ export function WeekView({
                           <div
                             key={block.id}
                             className={cn(
-                              "absolute left-0.5 right-0.5 rounded-md p-1.5 overflow-hidden z-10 border-l-3",
+                              "absolute left-0.5 right-0.5 rounded-md p-1.5 overflow-hidden z-10 border-l-3 group/block",
                               colors.bg,
                               colors.border,
                               "cursor-pointer hover:shadow-md transition-shadow"
@@ -284,7 +357,26 @@ export function WeekView({
                               borderLeftWidth: '3px'
                             }}
                             title={`${block.courseName} (${block.startTime} - ${block.endTime})`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEditEvent?.(block);
+                            }}
                           >
+                            {/* Edit button */}
+                            {onEditEvent && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="absolute top-0.5 right-0.5 h-5 w-5 p-0 opacity-0 group-hover/block:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onEditEvent(block);
+                                }}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                            )}
+                            
                             <div className={cn("text-xs font-semibold truncate", colors.text)}>
                               {block.courseCode}
                             </div>

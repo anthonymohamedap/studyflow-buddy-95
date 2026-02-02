@@ -42,7 +42,8 @@ import {
   FlaskConical,
   FolderKanban,
   Clock,
-  GraduationCap
+  GraduationCap,
+  Plus
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { WeekView } from './WeekView';
@@ -50,10 +51,13 @@ import { MonthView } from './MonthView';
 import { YearView } from './YearView';
 import { MiniCalendar } from './MiniCalendar';
 import { SmartPlanner } from './SmartPlanner';
+import { CalendarEventDialog, type CalendarEventFormData } from './CalendarEventDialog';
+import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { 
   ACADEMIC_EVENTS,
   getSemesterWeek,
-  ACADEMIC_YEAR_2025_2026
+  ACADEMIC_YEAR_2025_2026,
+  type ScheduleBlock
 } from '@/data/academicCalendar';
 import type { CalendarViewMode } from '@/types/calendar';
 import type { Database } from '@/integrations/supabase/types';
@@ -83,6 +87,15 @@ export function SmartCalendar({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [showSmartPlanner, setShowSmartPlanner] = useState(true);
+  
+  // CRUD dialog state
+  const [eventDialogOpen, setEventDialogOpen] = useState(false);
+  const [selectedEvent, setSelectedEvent] = useState<ScheduleBlock | null>(null);
+  const [selectedDay, setSelectedDay] = useState<number | undefined>();
+  const [selectedTime, setSelectedTime] = useState<string | undefined>();
+  
+  // Calendar events hook
+  const { scheduleBlocks, saveEvent, deleteEvent } = useCalendarEvents();
 
   const { semester, week } = getSemesterWeek(selectedDate);
 
@@ -324,6 +337,20 @@ END:VCALENDAR`;
                 </PopoverContent>
               </Popover>
 
+              {/* Add Event */}
+              <Button 
+                size="sm" 
+                onClick={() => {
+                  setSelectedEvent(null);
+                  setSelectedDay(undefined);
+                  setSelectedTime(undefined);
+                  setEventDialogOpen(true);
+                }}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Add Event
+              </Button>
+
               {/* Collapse */}
               <Button variant="ghost" size="sm" onClick={() => setIsExpanded(false)}>
                 <Minimize2 className="h-4 w-4" />
@@ -382,6 +409,19 @@ END:VCALENDAR`;
                 deliverables={deliverables}
                 onDateSelect={setSelectedDate}
                 courseFilter={selectedCourses.length > 0 ? selectedCourses : undefined}
+                scheduleBlocks={scheduleBlocks}
+                onAddEvent={(day, time) => {
+                  setSelectedEvent(null);
+                  setSelectedDay(day);
+                  setSelectedTime(time);
+                  setEventDialogOpen(true);
+                }}
+                onEditEvent={(event) => {
+                  setSelectedEvent(event);
+                  setSelectedDay(undefined);
+                  setSelectedTime(undefined);
+                  setEventDialogOpen(true);
+                }}
               />
             )}
             {viewMode === 'month' && (
@@ -486,6 +526,17 @@ END:VCALENDAR`;
           </CardContent>
         </Card>
       </div>
+
+      {/* CRUD Dialog */}
+      <CalendarEventDialog
+        open={eventDialogOpen}
+        onOpenChange={setEventDialogOpen}
+        event={selectedEvent}
+        selectedDay={selectedDay}
+        selectedTime={selectedTime}
+        onSave={saveEvent}
+        onDelete={deleteEvent}
+      />
     </motion.div>
   );
 }
