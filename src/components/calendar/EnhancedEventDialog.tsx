@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, forwardRef } from 'react';
 import { format, addHours, setHours, setMinutes } from 'date-fns';
 import {
   Dialog,
@@ -26,7 +26,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Trash2, Save, Calendar as CalendarIcon, MapPin, Repeat, Palette } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { 

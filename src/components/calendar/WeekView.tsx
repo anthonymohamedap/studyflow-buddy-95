@@ -352,45 +352,54 @@ export function WeekView({
       {/* Multi-day events row */}
       {multiDayEvents.length > 0 && (
         <div 
-          className="grid grid-cols-[60px_repeat(6,1fr)] border-b bg-muted/10 relative"
+          className="border-b bg-muted/10 relative"
           style={{ minHeight: `${maxMultiDayRows * 28 + 8}px` }}
         >
-          <div className="p-2 text-xs text-muted-foreground font-medium flex items-start justify-center">
-            Multi-day
+          <div className="grid grid-cols-[60px_repeat(6,1fr)] h-full">
+            <div className="p-2 text-xs text-muted-foreground font-medium flex items-start justify-center">
+              Multi-day
+            </div>
+            {weekDays.map((_, i) => (
+              <div key={i} className="border-l relative" />
+            ))}
           </div>
-          {weekDays.map((_, i) => (
-            <div key={i} className="border-l relative" />
-          ))}
           
-          {/* Render multi-day event bars */}
-          {multiDayEvents.map(({ event, startDayIndex, endDayIndex, row }) => {
-            const colors = getTypeColor(event.category);
-            const colWidth = 100 / 6; // Each column is 1/6 of the remaining space
-            const left = `calc(60px + ${startDayIndex * colWidth}% - ${startDayIndex * 10}px)`;
-            const width = `calc(${(endDayIndex - startDayIndex + 1) * colWidth}% - ${(endDayIndex - startDayIndex + 1) * 10}px)`;
-            
-            return (
-              <div
-                key={event.id}
-                className={cn(
-                  "absolute rounded px-2 py-0.5 text-xs font-medium truncate cursor-pointer hover:shadow-md transition-shadow border-l-2",
-                  colors.bg,
-                  colors.text
-                )}
-                style={{
-                  left: `calc(60px + ${startDayIndex * (100/6)}%)`,
-                  width: `calc(${(endDayIndex - startDayIndex + 1) * (100/6)}% - 4px)`,
-                  top: `${row * 28 + 4}px`,
-                  height: '24px',
-                  borderLeftColor: event.color || 'currentColor'
-                }}
-                onClick={() => onEditDbEvent?.(event)}
-                title={`${event.title} (${format(event.start_date, 'MMM d')} - ${format(event.end_date, 'MMM d')})`}
-              >
-                {event.title}
+          {/* Render multi-day event bars using grid-based positioning */}
+          <div className="absolute inset-0 grid grid-cols-[60px_repeat(6,1fr)]">
+            <div /> {/* Time column spacer */}
+            {weekDays.map((_, colIndex) => (
+              <div key={colIndex} className="relative">
+                {multiDayEvents
+                  .filter(({ startDayIndex }) => startDayIndex === colIndex)
+                  .map(({ event, startDayIndex, endDayIndex, row }) => {
+                    const colors = getTypeColor(event.category);
+                    const spanCols = endDayIndex - startDayIndex + 1;
+                    
+                    return (
+                      <div
+                        key={event.id}
+                        className={cn(
+                          "absolute rounded px-2 py-0.5 text-xs font-medium truncate cursor-pointer hover:shadow-md transition-shadow border-l-2 z-10",
+                          colors.bg,
+                          colors.text
+                        )}
+                        style={{
+                          left: '2px',
+                          width: `calc(${spanCols * 100}% - 4px)`,
+                          top: `${row * 28 + 4}px`,
+                          height: '24px',
+                          borderLeftColor: event.color || 'currentColor'
+                        }}
+                        onClick={() => onEditDbEvent?.(event)}
+                        title={`${event.title} (${format(event.start_date, 'MMM d')} - ${format(event.end_date, 'MMM d')})`}
+                      >
+                        {event.title}
+                      </div>
+                    );
+                  })}
               </div>
-            );
-          })}
+            ))}
+          </div>
         </div>
       )}
 
