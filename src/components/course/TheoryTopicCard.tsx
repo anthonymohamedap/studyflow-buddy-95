@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -18,8 +18,11 @@ import {
   BookOpen,
   Video,
   Link2,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
+import { DocumentOutline } from '@/components/revision/DocumentOutline';
 
 type TheoryTopic = Database['public']['Tables']['theory_topics']['Row'];
 
@@ -60,6 +63,9 @@ interface TheoryTopicCardProps {
 
 export function TheoryTopicCard({ topic, onStatusChange, onDelete }: TheoryTopicCardProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [showOutline, setShowOutline] = useState(false);
+  const [documentContent, setDocumentContent] = useState<string | undefined>();
+  const [loadingContent, setLoadingContent] = useState(false);
   
   const status = STATUS_CONFIG[topic.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.NOT_VIEWED;
   const StatusIcon = status.icon;
@@ -70,6 +76,29 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete }: TheoryTopic
     topic.source_type === 'PDF' ||
     topic.source_url.includes('supabase') // Files uploaded to storage
   );
+
+  const canParse = topic.source_type === 'PDF' || topic.source_type === 'SLIDES';
+  const isParsed = topic.parsing_status === 'completed';
+  const isParsing = topic.parsing_status === 'parsing';
+
+  // Load document content when outline is shown for parsing
+  useEffect(() => {
+    if (showOutline && canParse && !documentContent && !isParsed && topic.source_url) {
+      setLoadingContent(true);
+      // For PDF files, we'd need to use a parsing service
+      // For now, we'll fetch the content and use AI to extract text
+      // This is a placeholder - in production, you'd use a PDF parsing library
+      fetch(topic.source_url)
+        .then(async (res) => {
+          if (res.ok) {
+            const text = await res.text();
+            setDocumentContent(text);
+          }
+        })
+        .catch(console.error)
+        .finally(() => setLoadingContent(false));
+    }
+  }, [showOutline, canParse, documentContent, isParsed, topic.source_url]);
 
   const handleStatusClick = () => {
     const nextStatus = topic.status === 'NOT_VIEWED' 
@@ -95,7 +124,7 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete }: TheoryTopic
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1">
                 <h4 className="font-medium">{topic.title}</h4>
-                <div className="flex items-center gap-2 mt-1">
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
                   <Badge variant="outline" className="text-xs">
                     <SourceIcon className="h-3 w-3 mr-1" />
                     {topic.source_type}
@@ -103,6 +132,18 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete }: TheoryTopic
                   <Badge className={`text-xs ${status.badgeClass}`}>
                     {status.label}
                   </Badge>
+                  {isParsed && (
+                    <Badge variant="secondary" className="text-xs">
+                      <Sparkles className="h-3 w-3 mr-1" />
+                      AI Parsed
+                    </Badge>
+                  )}
+                  {isParsing && (
+                    <Badge variant="secondary" className="text-xs">
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Parsing...
+                    </Badge>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -128,6 +169,38 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete }: TheoryTopic
               <p className="text-sm text-muted-foreground mt-2 border-l-2 border-primary/30 pl-3">
                 {topic.personal_summary}
               </p>
+            )}
+
+            {/* AI Study Materials Outline */}
+            {canParse && (
+              <Collapsible open={showOutline} onOpenChange={setShowOutline} className="mt-3">
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full justify-between">
+                    <span className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4" />
+                      AI Study Materials
+                    </span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showOutline ? 'rotate-180' : ''}`} />
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3">
+                  <div className="rounded-lg border bg-muted/30 p-4">
+                    {loadingContent ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading document content...
+                      </div>
+                    ) : (
+                      <DocumentOutline
+                        theoryTopicId={topic.id}
+                        documentTitle={topic.title}
+                        documentContent={documentContent}
+                        parsingStatus={topic.parsing_status || 'pending'}
+                      />
+                    )}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
 
             {/* Collapsible File Preview */}

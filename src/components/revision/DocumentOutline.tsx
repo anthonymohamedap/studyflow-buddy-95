@@ -1,0 +1,159 @@
+import { useState } from 'react';
+import { ChevronRight, ChevronDown, FileText, Loader2, BookOpen, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { useDocumentChapters, useParseDocument } from '@/hooks/useDocumentStructure';
+import { cn } from '@/lib/utils';
+import { TopicDetailDialog } from './TopicDetailDialog';
+
+interface DocumentOutlineProps {
+  theoryTopicId: string;
+  documentTitle: string;
+  documentContent?: string;
+  parsingStatus?: string;
+  onParseDocument?: () => void;
+}
+
+export function DocumentOutline({ 
+  theoryTopicId, 
+  documentTitle,
+  documentContent,
+  parsingStatus,
+}: DocumentOutlineProps) {
+  const { data: chapters, isLoading } = useDocumentChapters(theoryTopicId);
+  const parseDocument = useParseDocument();
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
+
+  const toggleChapter = (chapterId: string) => {
+    setExpandedChapters(prev => {
+      const next = new Set(prev);
+      if (next.has(chapterId)) {
+        next.delete(chapterId);
+      } else {
+        next.add(chapterId);
+      }
+      return next;
+    });
+  };
+
+  const handleParse = () => {
+    if (!documentContent) return;
+    parseDocument.mutate({
+      theoryTopicId,
+      documentContent,
+      documentTitle,
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading document structure...
+      </div>
+    );
+  }
+
+  if (parsingStatus === 'parsing' || parseDocument.isPending) {
+    return (
+      <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        <span>AI is analyzing your document...</span>
+      </div>
+    );
+  }
+
+  if (!chapters || chapters.length === 0) {
+    if (parsingStatus === 'failed') {
+      return (
+        <div className="space-y-3 py-4">
+          <p className="text-sm text-destructive">Failed to parse document. Please try again.</p>
+          <Button size="sm" onClick={handleParse} disabled={!documentContent}>
+            <Sparkles className="h-4 w-4 mr-2" />
+            Retry Analysis
+          </Button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3 py-4">
+        <p className="text-sm text-muted-foreground">
+          Use AI to extract chapters and topics from this document.
+        </p>
+        <Button 
+          size="sm" 
+          onClick={handleParse} 
+          disabled={!documentContent || parseDocument.isPending}
+        >
+          <Sparkles className="h-4 w-4 mr-2" />
+          Analyze Document
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-medium flex items-center gap-2">
+          <BookOpen className="h-4 w-4" />
+          Document Structure
+        </h4>
+        <Badge variant="secondary" className="text-xs">
+          {chapters.length} chapters
+        </Badge>
+      </div>
+
+      <div className="space-y-1">
+        {chapters.map((chapter) => (
+          <Collapsible
+            key={chapter.id}
+            open={expandedChapters.has(chapter.id)}
+            onOpenChange={() => toggleChapter(chapter.id)}
+          >
+            <CollapsibleTrigger asChild>
+              <button className="flex items-center gap-2 w-full text-left px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
+                {expandedChapters.has(chapter.id) ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                )}
+                <span className="text-sm font-medium truncate">{chapter.title}</span>
+                <Badge variant="outline" className="ml-auto text-xs shrink-0">
+                  {chapter.topics.length}
+                </Badge>
+              </button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="ml-6 border-l pl-3 py-1 space-y-1">
+                {chapter.topics.map((topic) => (
+                  <button
+                    key={topic.id}
+                    onClick={() => setSelectedTopicId(topic.id)}
+                    className={cn(
+                      "flex items-center gap-2 w-full text-left px-2 py-1 rounded-md text-sm transition-colors",
+                      "hover:bg-primary/10 hover:text-primary",
+                      selectedTopicId === topic.id && "bg-primary/10 text-primary"
+                    )}
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{topic.title}</span>
+                  </button>
+                ))}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        ))}
+      </div>
+
+      {/* Topic Detail Dialog */}
+      <TopicDetailDialog 
+        topicId={selectedTopicId} 
+        onClose={() => setSelectedTopicId(null)} 
+      />
+    </div>
+  );
+}
