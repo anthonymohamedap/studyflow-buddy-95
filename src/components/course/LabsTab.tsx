@@ -14,6 +14,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import {
   Plus,
@@ -26,6 +32,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Sparkles,
+  MoreVertical,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { LabDetailPanel } from './LabDetailPanel';
@@ -36,15 +45,46 @@ interface LabsTabProps {
 
 export function LabsTab({ courseId }: LabsTabProps) {
   const { labs, isLoading, refetch } = useLabs(courseId);
-  const { createLab, parseLab } = useLabMutations();
+  const { createLab, updateLab, deleteLab, parseLab } = useLabMutations();
   const { language } = useLanguage();
   const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingLab, setEditingLab] = useState<typeof labs[0] | null>(null);
   const [newLabTitle, setNewLabTitle] = useState('');
   const [newLabWeek, setNewLabWeek] = useState<number | undefined>();
   const [isUploading, setIsUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleEditLab = (lab: typeof labs[0]) => {
+    setEditingLab(lab);
+    setShowEditDialog(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingLab) return;
+    try {
+      await updateLab.mutateAsync({
+        id: editingLab.id,
+        title: editingLab.title,
+        week_number: editingLab.week_number,
+        deadline: editingLab.deadline,
+      });
+      setShowEditDialog(false);
+      setEditingLab(null);
+      toast.success('Lab updated');
+    } catch (error) {
+      console.error('Update error:', error);
+    }
+  };
+
+  const handleDeleteLab = async (labId: string) => {
+    if (selectedLabId === labId) {
+      setSelectedLabId(null);
+    }
+    deleteLab.mutate(labId);
+  };
 
   const filteredLabs = labs.filter(lab =>
     lab.displayTitle.toLowerCase().includes(searchQuery.toLowerCase())
@@ -201,7 +241,29 @@ export function LabsTab({ courseId }: LabsTabProps) {
                         <p className="text-xs text-muted-foreground">Week {lab.week_number}</p>
                       )}
                     </div>
-                    {getStatusBadge(lab.status, lab.parsing_status)}
+                    <div className="flex items-center gap-1">
+                      {getStatusBadge(lab.status, lab.parsing_status)}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={(e) => { e.stopPropagation(); handleEditLab(lab); }}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={(e) => { e.stopPropagation(); handleDeleteLab(lab.id); }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
                   {lab.deadline && (
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-2">
@@ -319,6 +381,51 @@ export function LabsTab({ courseId }: LabsTabProps) {
             <Button onClick={handleCreateManual} disabled={!newLabTitle.trim()}>
               Create Lab
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Lab Dialog */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Lab</DialogTitle>
+          </DialogHeader>
+          {editingLab && (
+            <div className="space-y-4 py-4">
+              <div>
+                <Label htmlFor="editLabTitle">Lab Title</Label>
+                <Input
+                  id="editLabTitle"
+                  value={editingLab.title}
+                  onChange={(e) => setEditingLab({ ...editingLab, title: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="editLabWeek">Week Number</Label>
+                <Input
+                  id="editLabWeek"
+                  type="number"
+                  value={editingLab.week_number || ''}
+                  onChange={(e) => setEditingLab({ ...editingLab, week_number: e.target.value ? parseInt(e.target.value) : null })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="editLabDeadline">Deadline</Label>
+                <Input
+                  id="editLabDeadline"
+                  type="date"
+                  value={editingLab.deadline ? new Date(editingLab.deadline).toISOString().split('T')[0] : ''}
+                  onChange={(e) => setEditingLab({ ...editingLab, deadline: e.target.value || null })}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

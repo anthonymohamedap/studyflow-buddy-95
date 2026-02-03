@@ -2,11 +2,34 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   Eye, 
   Circle, 
@@ -20,6 +43,8 @@ import {
   Link2,
   Sparkles,
   Loader2,
+  MoreVertical,
+  Pencil,
 } from 'lucide-react';
 import type { Database } from '@/integrations/supabase/types';
 import { DocumentOutline } from '@/components/revision/DocumentOutline';
@@ -59,13 +84,33 @@ interface TheoryTopicCardProps {
   topic: TheoryTopic;
   onStatusChange: (topicId: string, newStatus: 'NOT_VIEWED' | 'REVIEWED' | 'MASTERED') => void;
   onDelete: (topicId: string) => void;
+  onUpdate: (id: string, data: Partial<TheoryTopic>) => void;
 }
 
-export function TheoryTopicCard({ topic, onStatusChange, onDelete }: TheoryTopicCardProps) {
+export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: TheoryTopicCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
   const [documentContent, setDocumentContent] = useState<string | undefined>();
   const [loadingContent, setLoadingContent] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editData, setEditData] = useState({
+    title: topic.title,
+    source_type: topic.source_type || 'SLIDES',
+    source_url: topic.source_url || '',
+    week_number: topic.week_number || 1,
+    personal_summary: topic.personal_summary || '',
+  });
+
+  const handleSaveEdit = () => {
+    onUpdate(topic.id, {
+      title: editData.title,
+      source_type: editData.source_type as 'SLIDES' | 'GITBOOK' | 'VIDEO' | 'PDF' | 'OTHER',
+      source_url: editData.source_url || null,
+      week_number: editData.week_number,
+      personal_summary: editData.personal_summary || null,
+    });
+    setShowEditDialog(false);
+  };
   
   const status = STATUS_CONFIG[topic.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.NOT_VIEWED;
   const StatusIcon = status.icon;
@@ -154,14 +199,26 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete }: TheoryTopic
                     </Button>
                   </a>
                 )}
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  className="h-8 w-8 text-destructive hover:text-destructive"
-                  onClick={() => onDelete(topic.id)}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setShowEditDialog(true)}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={() => onDelete(topic.id)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
             
@@ -228,6 +285,81 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete }: TheoryTopic
             )}
           </div>
         </div>
+
+        {/* Edit Dialog */}
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Topic</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-title">Title</Label>
+                <Input
+                  id="edit-title"
+                  value={editData.title}
+                  onChange={(e) => setEditData({ ...editData, title: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-week">Week</Label>
+                  <Input
+                    id="edit-week"
+                    type="number"
+                    min={1}
+                    max={16}
+                    value={editData.week_number}
+                    onChange={(e) => setEditData({ ...editData, week_number: parseInt(e.target.value) || 1 })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Source Type</Label>
+                  <Select
+                    value={editData.source_type}
+                    onValueChange={(value: 'SLIDES' | 'GITBOOK' | 'VIDEO' | 'PDF' | 'OTHER') => setEditData({ ...editData, source_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="SLIDES">Slides</SelectItem>
+                      <SelectItem value="GITBOOK">GitBook</SelectItem>
+                      <SelectItem value="VIDEO">Video</SelectItem>
+                      <SelectItem value="PDF">PDF</SelectItem>
+                      <SelectItem value="OTHER">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-url">Source URL</Label>
+                <Input
+                  id="edit-url"
+                  type="url"
+                  value={editData.source_url}
+                  onChange={(e) => setEditData({ ...editData, source_url: e.target.value })}
+                  placeholder="https://..."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-summary">Personal Summary</Label>
+                <Textarea
+                  id="edit-summary"
+                  value={editData.personal_summary}
+                  onChange={(e) => setEditData({ ...editData, personal_summary: e.target.value })}
+                  rows={3}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowEditDialog(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit}>Save Changes</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );
