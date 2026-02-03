@@ -114,7 +114,21 @@ If the document has no clear structure, create logical groupings with descriptiv
     
     let structuredContent;
     try {
-      structuredContent = JSON.parse(aiResult.choices[0].message.content);
+      const rawContent = aiResult.choices[0].message.content;
+      // Strip markdown code blocks if present
+      const cleanedContent = rawContent
+        .replace(/```json\s*/gi, "")
+        .replace(/```\s*/g, "")
+        .trim();
+      
+      let parsed = JSON.parse(cleanedContent);
+      
+      // Handle case where AI returns array wrapper: [{ chapters: [...] }]
+      if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].chapters) {
+        parsed = parsed[0];
+      }
+      
+      structuredContent = parsed;
     } catch (parseError) {
       throw new Error(`Failed to parse AI response as JSON: ${parseError}`);
     }
