@@ -27,13 +27,16 @@ import {
   LayoutDashboard,
   MoreVertical,
   Pencil,
-  Trash2
+  Trash2,
+  Clock
 } from 'lucide-react';
 import { AddCourseDialog } from '@/components/AddCourseDialog';
 import { EditCourseDialog } from '@/components/EditCourseDialog';
 import { CourseProgress } from '@/components/CourseProgress';
 import { SmartCalendar } from '@/components/calendar';
+import { TimelineView } from '@/components/timeline';
 import { LanguageToggle } from '@/components/LanguageToggle';
+import { ThemeToggle } from '@/components/ThemeToggle';
 import type { Database } from '@/integrations/supabase/types';
 
 type Course = Database['public']['Tables']['courses']['Row'];
@@ -59,7 +62,7 @@ export default function Dashboard() {
   const [showAddCourse, setShowAddCourse] = useState(false);
   const [showEditCourse, setShowEditCourse] = useState(false);
   const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
-  const [activeTab, setActiveTab] = useState<'courses' | 'calendar'>('courses');
+  const [activeTab, setActiveTab] = useState<'courses' | 'timeline' | 'calendar'>('courses');
 
   const handleEditCourse = (e: React.MouseEvent, course: Course) => {
     e.preventDefault();
@@ -98,6 +101,7 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-2">
               <LanguageToggle />
+              <ThemeToggle />
               <Button variant="ghost" size="sm" onClick={signOut}>
                 <LogOut className="h-4 w-4 mr-2" />
                 Sign Out
@@ -110,11 +114,15 @@ export default function Dashboard() {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         {/* Navigation Tabs */}
-        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'courses' | 'calendar')} className="mb-8">
-          <TabsList className="grid w-full max-w-md grid-cols-2">
+        <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'courses' | 'timeline' | 'calendar')} className="mb-8">
+          <TabsList className="grid w-full max-w-lg grid-cols-3">
             <TabsTrigger value="courses" className="flex items-center gap-2">
               <LayoutDashboard className="h-4 w-4" />
               Courses
+            </TabsTrigger>
+            <TabsTrigger value="timeline" className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Timeline
             </TabsTrigger>
             <TabsTrigger value="calendar" className="flex items-center gap-2">
               <Calendar className="h-4 w-4" />
@@ -294,6 +302,11 @@ export default function Dashboard() {
                 })}
               </div>
             )}
+          </TabsContent>
+
+          {/* Timeline Tab */}
+          <TabsContent value="timeline" className="mt-6">
+            <TimelineView />
           </TabsContent>
 
           {/* Calendar Tab */}
