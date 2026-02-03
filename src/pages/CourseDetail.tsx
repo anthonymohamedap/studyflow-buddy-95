@@ -33,8 +33,10 @@ import {
   Mail,
   Trash2,
   Languages,
-  Loader2
+  Loader2,
+  Pencil
 } from 'lucide-react';
+import { EditCourseDialog } from '@/components/EditCourseDialog';
 import { TheoryTab } from '@/components/course/TheoryTab';
 import { ExercisesTab } from '@/components/course/ExercisesTab';
 import { ProjectTab } from '@/components/course/ProjectTab';
@@ -59,6 +61,7 @@ export default function CourseDetail() {
   const bulkTranslate = useBulkTranslate();
   const { language } = useLanguage();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
 
   if (isLoading) {
     return (
@@ -134,6 +137,13 @@ export default function CourseDetail() {
                 </Button>
               )}
               <LanguageToggle />
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setShowEditDialog(true)}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
               <Button 
                 variant="ghost" 
                 size="icon"
@@ -272,6 +282,12 @@ export default function CourseDetail() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <EditCourseDialog 
+        open={showEditDialog} 
+        onOpenChange={setShowEditDialog} 
+        course={course}
+      />
     </div>
   );
 }

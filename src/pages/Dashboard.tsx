@@ -7,6 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { 
   GraduationCap, 
   Plus, 
@@ -18,12 +24,19 @@ import {
   Bot,
   AlertCircle,
   ChevronRight,
-  LayoutDashboard
+  LayoutDashboard,
+  MoreVertical,
+  Pencil,
+  Trash2
 } from 'lucide-react';
 import { AddCourseDialog } from '@/components/AddCourseDialog';
+import { EditCourseDialog } from '@/components/EditCourseDialog';
 import { CourseProgress } from '@/components/CourseProgress';
 import { SmartCalendar } from '@/components/calendar';
 import { LanguageToggle } from '@/components/LanguageToggle';
+import type { Database } from '@/integrations/supabase/types';
+
+type Course = Database['public']['Tables']['courses']['Row'];
 
 const COURSE_COLORS = [
   'bg-gradient-to-br from-blue-500 to-blue-600',
@@ -42,10 +55,26 @@ const AI_POLICY_BADGES = {
 
 export default function Dashboard() {
   const { user, signOut } = useAuth();
-  const { courses, isLoading } = useCourses();
+  const { courses, isLoading, deleteCourse } = useCourses();
   const [showAddCourse, setShowAddCourse] = useState(false);
+  const [showEditCourse, setShowEditCourse] = useState(false);
+  const [selectedCourse, setSelectedCourse] = useState<Course | null>(null);
   const [activeTab, setActiveTab] = useState<'courses' | 'calendar'>('courses');
 
+  const handleEditCourse = (e: React.MouseEvent, course: Course) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedCourse(course);
+    setShowEditCourse(true);
+  };
+
+  const handleDeleteCourse = async (e: React.MouseEvent, courseId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (confirm('Are you sure you want to delete this course? This will also delete all associated data.')) {
+      await deleteCourse.mutateAsync(courseId);
+    }
+  };
   // Get all exercises and projects for the calendar
   const allExercises = courses.flatMap(course => {
     // We'll need to fetch these - for now return empty
@@ -213,7 +242,34 @@ export default function Dashboard() {
                                 {course.lecturer || 'No lecturer assigned'}
                               </p>
                             </div>
-                            <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+                            <div className="flex items-center gap-1">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={(e) => e.preventDefault()}
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={(e) => handleEditCourse(e, course)}>
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={(e) => handleDeleteCourse(e, course.id)}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                              <ChevronRight className="h-5 w-5 text-muted-foreground group-hover:text-primary group-hover:translate-x-1 transition-all" />
+                            </div>
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-4">
@@ -251,6 +307,11 @@ export default function Dashboard() {
       </main>
 
       <AddCourseDialog open={showAddCourse} onOpenChange={setShowAddCourse} />
+      <EditCourseDialog 
+        open={showEditCourse} 
+        onOpenChange={setShowEditCourse} 
+        course={selectedCourse}
+      />
     </div>
   );
 }
