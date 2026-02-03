@@ -106,7 +106,24 @@ If the document has no clear structure, create logical groupings with descriptiv
     }
 
     const aiResult = await response.json();
-    const structuredContent = JSON.parse(aiResult.choices[0].message.content);
+    
+    // Validate AI response structure
+    if (!aiResult.choices?.[0]?.message?.content) {
+      throw new Error("Invalid AI response: missing content");
+    }
+    
+    let structuredContent;
+    try {
+      structuredContent = JSON.parse(aiResult.choices[0].message.content);
+    } catch (parseError) {
+      throw new Error(`Failed to parse AI response as JSON: ${parseError}`);
+    }
+    
+    // Validate chapters array exists
+    if (!structuredContent.chapters || !Array.isArray(structuredContent.chapters)) {
+      console.error("AI response missing chapters:", structuredContent);
+      throw new Error("AI response did not contain valid chapters array");
+    }
 
     // Insert chapters and topics
     for (let chapterIndex = 0; chapterIndex < structuredContent.chapters.length; chapterIndex++) {
