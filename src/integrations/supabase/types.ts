@@ -165,6 +165,88 @@ export type Database = {
           },
         ]
       }
+      document_chapters: {
+        Row: {
+          content: string | null
+          created_at: string
+          id: string
+          page_end: number | null
+          page_start: number | null
+          sort_order: number | null
+          theory_topic_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          page_end?: number | null
+          page_start?: number | null
+          sort_order?: number | null
+          theory_topic_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          content?: string | null
+          created_at?: string
+          id?: string
+          page_end?: number | null
+          page_start?: number | null
+          sort_order?: number | null
+          theory_topic_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_chapters_theory_topic_id_fkey"
+            columns: ["theory_topic_id"]
+            isOneToOne: false
+            referencedRelation: "theory_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      document_topics: {
+        Row: {
+          chapter_id: string
+          content: string | null
+          created_at: string
+          id: string
+          sort_order: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          chapter_id: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          sort_order?: number | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          chapter_id?: string
+          content?: string | null
+          created_at?: string
+          id?: string
+          sort_order?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_topics_chapter_id_fkey"
+            columns: ["chapter_id"]
+            isOneToOne: false
+            referencedRelation: "document_chapters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exercises: {
         Row: {
           course_id: string
@@ -268,12 +350,56 @@ export type Database = {
           },
         ]
       }
+      revision_assets: {
+        Row: {
+          asset_type: string
+          content: Json
+          created_at: string
+          generated_at: string | null
+          id: string
+          is_generating: boolean | null
+          topic_id: string
+          updated_at: string
+        }
+        Insert: {
+          asset_type: string
+          content?: Json
+          created_at?: string
+          generated_at?: string | null
+          id?: string
+          is_generating?: boolean | null
+          topic_id: string
+          updated_at?: string
+        }
+        Update: {
+          asset_type?: string
+          content?: Json
+          created_at?: string
+          generated_at?: string | null
+          id?: string
+          is_generating?: boolean | null
+          topic_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "revision_assets_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "document_topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       theory_topics: {
         Row: {
           course_id: string
           created_at: string
           file_path: string | null
           id: string
+          parsed_at: string | null
+          parsing_error: string | null
+          parsing_status: string | null
           personal_summary: string | null
           sort_order: number | null
           source_type: Database["public"]["Enums"]["source_type"] | null
@@ -288,6 +414,9 @@ export type Database = {
           created_at?: string
           file_path?: string | null
           id?: string
+          parsed_at?: string | null
+          parsing_error?: string | null
+          parsing_status?: string | null
           personal_summary?: string | null
           sort_order?: number | null
           source_type?: Database["public"]["Enums"]["source_type"] | null
@@ -302,6 +431,9 @@ export type Database = {
           created_at?: string
           file_path?: string | null
           id?: string
+          parsed_at?: string | null
+          parsing_error?: string | null
+          parsing_status?: string | null
           personal_summary?: string | null
           sort_order?: number | null
           source_type?: Database["public"]["Enums"]["source_type"] | null
@@ -349,6 +481,41 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topic_notes: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          topic_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content?: string
+          created_at?: string
+          id?: string
+          topic_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          topic_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_notes_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "document_topics"
             referencedColumns: ["id"]
           },
         ]
