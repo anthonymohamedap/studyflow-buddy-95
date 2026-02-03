@@ -90,39 +90,12 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate user
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-    if (!SUPABASE_URL || !SUPABASE_ANON_KEY || !SUPABASE_SERVICE_ROLE_KEY) {
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error("Supabase configuration missing");
     }
-
-    // Verify JWT and get user
-    const authClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-      global: { headers: { Authorization: authHeader } }
-    });
-    
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await authClient.auth.getUser(token);
-    
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    const userId = user.id;
 
     const { topicId, assetType, topicContent, topicTitle } = await req.json();
 
@@ -147,20 +120,10 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Verify user owns this topic through the course chain
+    // Verify topic exists
     const { data: topic, error: topicError } = await supabase
       .from("document_topics")
-      .select(`
-        id,
-        chapter_id,
-        document_chapters(
-          theory_topic_id,
-          theory_topics(
-            course_id,
-            courses(user_id)
-          )
-        )
-      `)
+      .select("id")
       .eq("id", topicId)
       .single();
 
@@ -168,19 +131,6 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Topic not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Extract user_id from nested structure
-    const chapters = topic.document_chapters as unknown as {
-      theory_topics: { courses: { user_id: string } | null } | null
-    } | null;
-    const ownerUserId = chapters?.theory_topics?.courses?.user_id;
-    
-    if (!ownerUserId || ownerUserId !== userId) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
