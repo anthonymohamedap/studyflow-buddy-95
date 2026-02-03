@@ -43,6 +43,18 @@ export interface CalendarEventFormData {
   location?: string;
   color?: string;
   course_id?: string;
+  // New study-specific metadata
+  status?: 'NOT_STARTED' | 'IN_PROGRESS' | 'DONE' | 'NEEDS_REVIEW';
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH';
+  topic_id?: string;
+  lab_id?: string;
+  project_id?: string;
+  exercise_id?: string;
+  estimated_duration?: number;
+  actual_duration?: number;
+  redo_for_exam?: boolean;
+  feedback?: string;
+  notes?: string;
 }
 
 // Expanded event with recurrence instances
@@ -61,6 +73,18 @@ export interface ExpandedCalendarEvent {
   course_id?: string | null;
   isRecurrenceInstance: boolean;
   instanceDate?: Date;
+  // New study-specific metadata
+  status?: string | null;
+  priority?: string | null;
+  topic_id?: string | null;
+  lab_id?: string | null;
+  project_id?: string | null;
+  exercise_id?: string | null;
+  estimated_duration?: number | null;
+  actual_duration?: number | null;
+  redo_for_exam?: boolean | null;
+  feedback?: string | null;
+  notes?: string | null;
 }
 
 export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
@@ -239,6 +263,18 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
             color: event.color,
             course_id: event.course_id,
             isRecurrenceInstance: false,
+            // New metadata
+            status: (event as any).status,
+            priority: (event as any).priority,
+            topic_id: (event as any).topic_id,
+            lab_id: (event as any).lab_id,
+            project_id: (event as any).project_id,
+            exercise_id: (event as any).exercise_id,
+            estimated_duration: (event as any).estimated_duration,
+            actual_duration: (event as any).actual_duration,
+            redo_for_exam: (event as any).redo_for_exam,
+            feedback: (event as any).feedback,
+            notes: (event as any).notes,
           });
         }
       } else {
@@ -323,6 +359,18 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
               course_id: event.course_id,
               isRecurrenceInstance: currentStart.getTime() !== eventStart.getTime(),
               instanceDate: currentStart,
+              // New metadata
+              status: (event as any).status,
+              priority: (event as any).priority,
+              topic_id: (event as any).topic_id,
+              lab_id: (event as any).lab_id,
+              project_id: (event as any).project_id,
+              exercise_id: (event as any).exercise_id,
+              estimated_duration: (event as any).estimated_duration,
+              actual_duration: (event as any).actual_duration,
+              redo_for_exam: (event as any).redo_for_exam,
+              feedback: (event as any).feedback,
+              notes: (event as any).notes,
             });
           }
 
@@ -369,6 +417,28 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
     return startDay.getTime() !== endDay.getTime();
   }, []);
 
+  // Conflict detection: find overlapping events
+  const findConflicts = useCallback((newStart: Date, newEnd: Date, excludeId?: string): ExpandedCalendarEvent[] => {
+    return expandedEvents.filter(event => {
+      // Skip the event being edited
+      if (excludeId && (event.id === excludeId || event.originalId === excludeId)) {
+        return false;
+      }
+      // Skip all-day events for time-based conflict detection
+      if (event.all_day) {
+        return false;
+      }
+      // Check for overlap: events overlap if one starts before the other ends
+      const overlaps = newStart < event.end_date && newEnd > event.start_date;
+      return overlaps;
+    });
+  }, [expandedEvents]);
+
+  // Check if a new event would have conflicts
+  const hasConflicts = useCallback((newStart: Date, newEnd: Date, excludeId?: string): boolean => {
+    return findConflicts(newStart, newEnd, excludeId).length > 0;
+  }, [findConflicts]);
+
   // Get schedule blocks (from sample data, filtered by vacation)
   const [scheduleBlocks, setScheduleBlocks] = useState<ScheduleBlock[]>(SAMPLE_WEEKLY_SCHEDULE);
 
@@ -391,6 +461,8 @@ export function useDbCalendarEvents(startDate?: Date, endDate?: Date) {
     saveEvent,
     getEventsForDate,
     isMultiDayEvent,
+    findConflicts,
+    hasConflicts,
     scheduleBlocks,
     setScheduleBlocks,
     getScheduleForDate,

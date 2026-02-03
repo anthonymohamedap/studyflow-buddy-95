@@ -6,7 +6,10 @@ export type Deliverable = Database['public']['Tables']['deliverables']['Row'];
 export type TheoryTopic = Database['public']['Tables']['theory_topics']['Row'];
 export type Course = Database['public']['Tables']['courses']['Row'];
 
-export type CalendarViewMode = 'week' | 'month' | 'year';
+export type CalendarViewMode = 'day' | 'week' | 'month' | 'year' | 'agenda';
+
+export type EventStatus = 'NOT_STARTED' | 'IN_PROGRESS' | 'DONE' | 'NEEDS_REVIEW';
+export type EventPriority = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export interface CalendarEvent {
   id: string;
