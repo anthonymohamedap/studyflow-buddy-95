@@ -28,6 +28,7 @@ import {
   FolderKanban, 
   Calendar,
   Bot,
+  FlaskRound,
   ExternalLink,
   Mail,
   Trash2,
@@ -38,6 +39,7 @@ import { TheoryTab } from '@/components/course/TheoryTab';
 import { ExercisesTab } from '@/components/course/ExercisesTab';
 import { ProjectTab } from '@/components/course/ProjectTab';
 import { PlanningTab } from '@/components/course/PlanningTab';
+import { LabsTab } from '@/components/course/LabsTab';
 import { LanguageToggle } from '@/components/LanguageToggle';
 
 const AI_POLICY_BADGES = {
@@ -205,14 +207,18 @@ export default function CourseDetail() {
 
         {/* Tabs */}
         <Tabs defaultValue="theory" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
             <TabsTrigger value="theory" className="gap-2">
               <BookOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Theory</span>
             </TabsTrigger>
+            <TabsTrigger value="labs" className="gap-2">
+              <FlaskRound className="h-4 w-4" />
+              <span className="hidden sm:inline">Labos</span>
+            </TabsTrigger>
             <TabsTrigger value="exercises" className="gap-2">
               <FlaskConical className="h-4 w-4" />
-              <span className="hidden sm:inline">Labs</span>
+              <span className="hidden sm:inline">Exercises</span>
             </TabsTrigger>
             <TabsTrigger value="project" className="gap-2">
               <FolderKanban className="h-4 w-4" />
@@ -226,6 +232,10 @@ export default function CourseDetail() {
 
           <TabsContent value="theory">
             <TheoryTab courseId={course.id} />
+          </TabsContent>
+
+          <TabsContent value="labs">
+            <LabsTab courseId={course.id} />
           </TabsContent>
 
           <TabsContent value="exercises">

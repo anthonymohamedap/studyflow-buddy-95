@@ -8,12 +8,12 @@ const corsHeaders = {
 };
 
 interface TranslateRequest {
-  type: "chapter" | "topic" | "revision_asset";
+  type: "chapter" | "topic" | "revision_asset" | "lab" | "lab_asset";
   id: string;
 }
 
 interface BulkTranslateRequest {
-  type: "course" | "document";
+  type: "course" | "document" | "lab_course";
   id: string;
 }
 
@@ -288,6 +288,100 @@ async function handleSingleTranslation(
     }
   }
 
+  if (type === "lab") {
+    await supabase
+      .from("lab_documents")
+      .update({ translation_status: "translating" })
+      .eq("id", id);
+
+    const { data: lab, error } = await supabase
+      .from("lab_documents")
+      .select("title, description")
+      .eq("id", id)
+      .single();
+
+    if (error || !lab) {
+      return new Response(
+        JSON.stringify({ error: "Lab not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      const titleNl = await translateText(lovableApiKey, lab.title, "lab title");
+      const descriptionNl = lab.description 
+        ? await translateText(lovableApiKey, lab.description, "lab description")
+        : null;
+
+      await supabase
+        .from("lab_documents")
+        .update({
+          title_nl: titleNl,
+          description_nl: descriptionNl,
+          translation_status: "completed",
+        })
+        .eq("id", id);
+
+      return new Response(
+        JSON.stringify({ success: true, title_nl: titleNl }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (error) {
+      await supabase
+        .from("lab_documents")
+        .update({ translation_status: "failed" })
+        .eq("id", id);
+      throw error;
+    }
+  }
+
+  if (type === "lab_asset") {
+    await supabase
+      .from("lab_assets")
+      .update({ translation_status: "translating" })
+      .eq("id", id);
+
+    const { data: asset, error } = await supabase
+      .from("lab_assets")
+      .select("content, asset_type")
+      .eq("id", id)
+      .single();
+
+    if (error || !asset) {
+      return new Response(
+        JSON.stringify({ error: "Lab asset not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      const contentNl = await translateJSON(
+        lovableApiKey, 
+        asset.content as Record<string, unknown>, 
+        asset.asset_type
+      );
+
+      await supabase
+        .from("lab_assets")
+        .update({
+          content_nl: contentNl,
+          translation_status: "completed",
+        })
+        .eq("id", id);
+
+      return new Response(
+        JSON.stringify({ success: true, content_nl: contentNl }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (error) {
+      await supabase
+        .from("lab_assets")
+        .update({ translation_status: "failed" })
+        .eq("id", id);
+      throw error;
+    }
+  }
+
   return new Response(
     JSON.stringify({ error: "Invalid type" }),
     { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -348,6 +442,29 @@ async function handleBulkTranslation(
             translatedCount++;
           }
         }
+      }
+    }
+
+    // Also translate labs
+    const { data: labs } = await supabase
+      .from("lab_documents")
+      .select("id")
+      .eq("course_id", id)
+      .eq("translation_status", "pending");
+
+    for (const lab of labs || []) {
+      await handleSingleTranslation(supabase, lovableApiKey, { type: "lab", id: lab.id });
+      translatedCount++;
+
+      const { data: labAssets } = await supabase
+        .from("lab_assets")
+        .select("id")
+        .eq("lab_id", lab.id)
+        .eq("translation_status", "pending");
+
+      for (const asset of labAssets || []) {
+        await handleSingleTranslation(supabase, lovableApiKey, { type: "lab_asset", id: asset.id });
+        translatedCount++;
       }
     }
 
