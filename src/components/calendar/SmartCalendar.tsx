@@ -41,7 +41,8 @@ import {
   Clock,
   GraduationCap,
   Plus,
-  Loader2
+  Loader2,
+  Link2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { WeekView } from './WeekView';
@@ -51,8 +52,10 @@ import { MiniCalendar } from './MiniCalendar';
 import { SmartPlanner } from './SmartPlanner';
 import { CalendarEventDialog, type CalendarEventFormData } from './CalendarEventDialog';
 import { EnhancedEventDialog } from './EnhancedEventDialog';
+import { GoogleCalendarConnect } from './GoogleCalendarConnect';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useDbCalendarEvents, type ExpandedCalendarEvent, type CalendarEventFormData as DbEventFormData } from '@/hooks/useDbCalendarEvents';
+import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   ACADEMIC_EVENTS,
@@ -88,6 +91,15 @@ export function SmartCalendar({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [showSmartPlanner, setShowSmartPlanner] = useState(true);
+  const [showGoogleConnect, setShowGoogleConnect] = useState(false);
+  
+  // Google Calendar hook
+  const { 
+    isConnected: isGoogleConnected, 
+    isCheckingConnection: isCheckingGoogle,
+    connect: connectGoogle,
+    isConnecting: isGoogleConnecting
+  } = useGoogleCalendar();
   
   // Legacy CRUD dialog state (for schedule blocks)
   const [legacyDialogOpen, setLegacyDialogOpen] = useState(false);
@@ -403,6 +415,27 @@ END:VCALENDAR`;
                   </PopoverContent>
                 </Popover>
               )}
+
+              {/* Google Calendar Connect */}
+              <Popover open={showGoogleConnect} onOpenChange={setShowGoogleConnect}>
+                <PopoverTrigger asChild>
+                  <Button 
+                    variant={isGoogleConnected ? "default" : "outline"} 
+                    size="sm"
+                    disabled={isCheckingGoogle}
+                  >
+                    {isCheckingGoogle ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Link2 className="h-4 w-4 mr-2" />
+                    )}
+                    {isGoogleConnected ? "Google Connected" : "Connect Google"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80 p-0">
+                  <GoogleCalendarConnect />
+                </PopoverContent>
+              </Popover>
 
               {/* Sync to phone */}
               <Popover>
