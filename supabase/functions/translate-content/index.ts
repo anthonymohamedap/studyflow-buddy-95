@@ -26,36 +26,9 @@ serve(async (req) => {
   }
 
   try {
-    // Authenticate user
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
-
-    // Verify JWT and get user
-    const authClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
-    
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: userError } = await authClient.auth.getUser(token);
-    
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-    
-    const userId = user.id;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -63,10 +36,10 @@ serve(async (req) => {
     const { type, id, bulk } = body;
 
     if (bulk) {
-      return await handleBulkTranslation(supabase, lovableApiKey, userId, body as BulkTranslateRequest);
+      return await handleBulkTranslation(supabase, lovableApiKey, body as BulkTranslateRequest);
     }
 
-    return await handleSingleTranslation(supabase, lovableApiKey, userId, { type, id } as TranslateRequest);
+    return await handleSingleTranslation(supabase, lovableApiKey, { type, id } as TranslateRequest);
   } catch (error) {
     console.error("Translation error:", error);
     return new Response(
@@ -170,16 +143,14 @@ CRITICAL RULES:
 async function handleSingleTranslation(
   supabase: SupabaseClient,
   lovableApiKey: string,
-  userId: string,
   request: TranslateRequest
 ): Promise<Response> {
   const { type, id } = request;
 
   if (type === "chapter") {
-    // Verify ownership through the chain: chapter -> theory_topic -> course -> user
     const { data: chapter, error } = await supabase
       .from("document_chapters")
-      .select("id, title, content, theory_topics(courses(user_id))")
+      .select("id, title, content")
       .eq("id", id)
       .single();
 
@@ -187,14 +158,6 @@ async function handleSingleTranslation(
       return new Response(
         JSON.stringify({ error: "Chapter not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const theoryTopic = chapter.theory_topics as unknown as { courses: { user_id: string } | null } | null;
-    if (!theoryTopic?.courses || theoryTopic.courses.user_id !== userId) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -232,10 +195,9 @@ async function handleSingleTranslation(
   }
 
   if (type === "topic") {
-    // Verify ownership through the chain
     const { data: topic, error } = await supabase
       .from("document_topics")
-      .select("id, title, content, document_chapters(theory_topics(courses(user_id)))")
+      .select("id, title, content")
       .eq("id", id)
       .single();
 
@@ -243,14 +205,6 @@ async function handleSingleTranslation(
       return new Response(
         JSON.stringify({ error: "Topic not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const chapter = topic.document_chapters as unknown as { theory_topics: { courses: { user_id: string } | null } | null } | null;
-    if (!chapter?.theory_topics?.courses || chapter.theory_topics.courses.user_id !== userId) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -288,10 +242,9 @@ async function handleSingleTranslation(
   }
 
   if (type === "revision_asset") {
-    // Verify ownership through the chain
     const { data: asset, error } = await supabase
       .from("revision_assets")
-      .select("id, content, asset_type, document_topics(document_chapters(theory_topics(courses(user_id))))")
+      .select("id, content, asset_type")
       .eq("id", id)
       .single();
 
@@ -299,14 +252,6 @@ async function handleSingleTranslation(
       return new Response(
         JSON.stringify({ error: "Revision asset not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const docTopic = asset.document_topics as unknown as { document_chapters: { theory_topics: { courses: { user_id: string } | null } | null } | null } | null;
-    if (!docTopic?.document_chapters?.theory_topics?.courses || docTopic.document_chapters.theory_topics.courses.user_id !== userId) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -344,10 +289,9 @@ async function handleSingleTranslation(
   }
 
   if (type === "lab") {
-    // Verify ownership through lab -> course -> user
     const { data: lab, error } = await supabase
       .from("lab_documents")
-      .select("id, title, description, courses(user_id)")
+      .select("id, title, description")
       .eq("id", id)
       .single();
 
@@ -355,14 +299,6 @@ async function handleSingleTranslation(
       return new Response(
         JSON.stringify({ error: "Lab not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const course = lab.courses as unknown as { user_id: string } | null;
-    if (!course || course.user_id !== userId) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -400,10 +336,9 @@ async function handleSingleTranslation(
   }
 
   if (type === "lab_asset") {
-    // Verify ownership through lab_asset -> lab -> course -> user
     const { data: asset, error } = await supabase
       .from("lab_assets")
-      .select("id, content, asset_type, lab_documents(courses(user_id))")
+      .select("id, content, asset_type")
       .eq("id", id)
       .single();
 
@@ -411,14 +346,6 @@ async function handleSingleTranslation(
       return new Response(
         JSON.stringify({ error: "Lab asset not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const labDoc = asset.lab_documents as unknown as { courses: { user_id: string } | null } | null;
-    if (!labDoc?.courses || labDoc.courses.user_id !== userId) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -464,16 +391,14 @@ async function handleSingleTranslation(
 async function handleBulkTranslation(
   supabase: SupabaseClient,
   lovableApiKey: string,
-  userId: string,
   request: BulkTranslateRequest
 ): Promise<Response> {
   const { type, id } = request;
 
   if (type === "course") {
-    // Verify user owns the course
     const { data: course, error: courseError } = await supabase
       .from("courses")
-      .select("id, user_id")
+      .select("id")
       .eq("id", id)
       .single();
 
@@ -481,13 +406,6 @@ async function handleBulkTranslation(
       return new Response(
         JSON.stringify({ error: "Course not found" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (course.user_id !== userId) {
-      return new Response(
-        JSON.stringify({ error: "Forbidden" }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -513,7 +431,7 @@ async function handleBulkTranslation(
         .eq("translation_status", "pending");
 
       for (const chapter of chapters || []) {
-        await handleSingleTranslation(supabase, lovableApiKey, userId, { type: "chapter", id: chapter.id });
+        await handleSingleTranslation(supabase, lovableApiKey, { type: "chapter", id: chapter.id });
         translatedCount++;
 
         const { data: docTopics } = await supabase
@@ -523,7 +441,7 @@ async function handleBulkTranslation(
           .eq("translation_status", "pending");
 
         for (const docTopic of docTopics || []) {
-          await handleSingleTranslation(supabase, lovableApiKey, userId, { type: "topic", id: docTopic.id });
+          await handleSingleTranslation(supabase, lovableApiKey, { type: "topic", id: docTopic.id });
           translatedCount++;
 
           const { data: assets } = await supabase
@@ -533,7 +451,7 @@ async function handleBulkTranslation(
             .eq("translation_status", "pending");
 
           for (const asset of assets || []) {
-            await handleSingleTranslation(supabase, lovableApiKey, userId, { type: "revision_asset", id: asset.id });
+            await handleSingleTranslation(supabase, lovableApiKey, { type: "revision_asset", id: asset.id });
             translatedCount++;
           }
         }
@@ -548,7 +466,7 @@ async function handleBulkTranslation(
       .eq("translation_status", "pending");
 
     for (const lab of labs || []) {
-      await handleSingleTranslation(supabase, lovableApiKey, userId, { type: "lab", id: lab.id });
+      await handleSingleTranslation(supabase, lovableApiKey, { type: "lab", id: lab.id });
       translatedCount++;
 
       const { data: labAssets } = await supabase
@@ -558,7 +476,7 @@ async function handleBulkTranslation(
         .eq("translation_status", "pending");
 
       for (const asset of labAssets || []) {
-        await handleSingleTranslation(supabase, lovableApiKey, userId, { type: "lab_asset", id: asset.id });
+        await handleSingleTranslation(supabase, lovableApiKey, { type: "lab_asset", id: asset.id });
         translatedCount++;
       }
     }
