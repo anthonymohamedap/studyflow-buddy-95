@@ -6,4 +6,5 @@ export { MiniCalendar } from './MiniCalendar';
 export { SmartPlanner } from './SmartPlanner';
 export { CalendarEventDialog } from './CalendarEventDialog';
 export { EnhancedEventDialog } from './EnhancedEventDialog';
+export { GoogleCalendarConnect } from './GoogleCalendarConnect';
 export type { CalendarEventFormData } from './CalendarEventDialog';
