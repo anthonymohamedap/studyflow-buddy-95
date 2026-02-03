@@ -34,7 +34,8 @@ import {
   Trash2,
   Languages,
   Loader2,
-  Pencil
+  Pencil,
+  Sparkles
 } from 'lucide-react';
 import { EditCourseDialog } from '@/components/EditCourseDialog';
 import { TheoryTab } from '@/components/course/TheoryTab';
@@ -42,7 +43,9 @@ import { ExercisesTab } from '@/components/course/ExercisesTab';
 import { ProjectTab } from '@/components/course/ProjectTab';
 import { PlanningTab } from '@/components/course/PlanningTab';
 import { LabsTab } from '@/components/course/LabsTab';
+import { AITutorTab } from '@/components/course/AITutorTab';
 import { LanguageToggle } from '@/components/LanguageToggle';
+import { FloatingAIButton } from '@/components/ai-assistant';
 
 const AI_POLICY_BADGES = {
   ALLOWED: { label: 'AI Allowed', className: 'bg-success text-success-foreground' },
@@ -217,7 +220,7 @@ export default function CourseDetail() {
 
         {/* Tabs */}
         <Tabs defaultValue="theory" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:w-auto lg:inline-grid">
+          <TabsList className="grid w-full grid-cols-6 lg:w-auto lg:inline-grid">
             <TabsTrigger value="theory" className="gap-2">
               <BookOpen className="h-4 w-4" />
               <span className="hidden sm:inline">Theory</span>
@@ -237,6 +240,10 @@ export default function CourseDetail() {
             <TabsTrigger value="planning" className="gap-2">
               <Calendar className="h-4 w-4" />
               <span className="hidden sm:inline">Planning</span>
+            </TabsTrigger>
+            <TabsTrigger value="ai-tutor" className="gap-2">
+              <Sparkles className="h-4 w-4" />
+              <span className="hidden sm:inline">AI Tutor</span>
             </TabsTrigger>
           </TabsList>
 
@@ -258,6 +265,14 @@ export default function CourseDetail() {
 
           <TabsContent value="planning">
             <PlanningTab courseId={course.id} />
+          </TabsContent>
+
+          <TabsContent value="ai-tutor">
+            <AITutorTab 
+              courseId={course.id} 
+              courseName={course.name}
+              aiPolicy={course.ai_policy as "ALLOWED" | "LIMITED" | "FORBIDDEN"}
+            />
           </TabsContent>
         </Tabs>
       </main>
@@ -287,6 +302,12 @@ export default function CourseDetail() {
         open={showEditDialog} 
         onOpenChange={setShowEditDialog} 
         course={course}
+      />
+
+      {/* Floating AI Button */}
+      <FloatingAIButton
+        aiPolicy={course.ai_policy as "ALLOWED" | "LIMITED" | "FORBIDDEN"}
+        courseName={course.name}
       />
     </div>
   );
