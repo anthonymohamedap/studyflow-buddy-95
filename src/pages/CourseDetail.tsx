@@ -4,8 +4,10 @@ import { useCourse, useCourses } from '@/hooks/useCourses';
 import { useTheoryTopics } from '@/hooks/useTheoryTopics';
 import { useExercises } from '@/hooks/useExercises';
 import { useProject } from '@/hooks/useProjects';
+import { useBulkTranslate } from '@/hooks/useTranslation';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -29,12 +31,14 @@ import {
   ExternalLink,
   Mail,
   Trash2,
-  Settings
+  Languages,
+  Loader2
 } from 'lucide-react';
 import { TheoryTab } from '@/components/course/TheoryTab';
 import { ExercisesTab } from '@/components/course/ExercisesTab';
 import { ProjectTab } from '@/components/course/ProjectTab';
 import { PlanningTab } from '@/components/course/PlanningTab';
+import { LanguageToggle } from '@/components/LanguageToggle';
 
 const AI_POLICY_BADGES = {
   ALLOWED: { label: 'AI Allowed', className: 'bg-success text-success-foreground' },
@@ -50,6 +54,8 @@ export default function CourseDetail() {
   const { topics } = useTheoryTopics(id);
   const { exercises } = useExercises(id);
   const { project } = useProject(id);
+  const bulkTranslate = useBulkTranslate();
+  const { language } = useLanguage();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
 
   if (isLoading) {
@@ -110,6 +116,22 @@ export default function CourseDetail() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {language === 'nl' && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => bulkTranslate.mutate({ type: 'course', id: course.id })}
+                  disabled={bulkTranslate.isPending}
+                >
+                  {bulkTranslate.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Languages className="h-4 w-4 mr-2" />
+                  )}
+                  Translate All
+                </Button>
+              )}
+              <LanguageToggle />
               <Button 
                 variant="ghost" 
                 size="icon"

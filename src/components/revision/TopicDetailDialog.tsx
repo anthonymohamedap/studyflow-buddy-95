@@ -3,9 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Loader2, Sparkles, BookOpen, MessageSquare, HelpCircle, Save } from 'lucide-react';
+import { Loader2, Sparkles, BookOpen, Save } from 'lucide-react';
 import { useDocumentTopic } from '@/hooks/useDocumentStructure';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { useTranslateContent } from '@/hooks/useTranslation';
+import { TranslationStatus } from '@/components/TranslationStatus';
 import { 
   useRevisionAsset, 
   useGenerateRevision, 
@@ -29,6 +31,8 @@ interface TopicDetailDialogProps {
 
 export function TopicDetailDialog({ topicId, onClose }: TopicDetailDialogProps) {
   const { user } = useAuth();
+  const { language } = useLanguage();
+  const translateContent = useTranslateContent();
   const [activeTab, setActiveTab] = useState<AssetType | 'notes'>('summary');
   const [localNotes, setLocalNotes] = useState('');
   
@@ -60,6 +64,24 @@ export function TopicDetailDialog({ topicId, onClose }: TopicDetailDialogProps) 
   if (notes && localNotes === '' && notes.content !== localNotes) {
     setLocalNotes(notes.content);
   }
+
+  // Helper to get translated content for revision assets
+  const getAssetContent = <T,>(asset: { content: T; content_nl?: T | null } | null | undefined): T | null => {
+    if (!asset) return null;
+    if (language === 'nl' && asset.content_nl && Object.keys(asset.content_nl as object).length > 0) {
+      return asset.content_nl as T;
+    }
+    return asset.content;
+  };
+
+  // Get topic title in correct language
+  const getTopicTitle = () => {
+    if (!topic) return 'Topic Details';
+    if (language === 'nl' && topic.title_nl) {
+      return topic.title_nl;
+    }
+    return topic.title;
+  };
 
   const isGenerating = (assetType: AssetType) => {
     const assetMap = {
@@ -94,13 +116,56 @@ export function TopicDetailDialog({ topicId, onClose }: TopicDetailDialogProps) 
     );
   };
 
+  const renderAssetWithTranslation = (
+    assetType: AssetType,
+    asset: typeof summaryAsset | typeof flashcardsAsset | typeof quizAsset | typeof keywordsAsset,
+    isLoading: boolean,
+    label: string,
+    description: string,
+    renderContent: (content: unknown) => React.ReactNode
+  ) => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin" />
+        </div>
+      );
+    }
+
+    if (asset?.generated_at && asset.content) {
+      const content = getAssetContent(asset);
+      const needsTranslation = language === 'nl' && (!asset.content_nl || Object.keys(asset.content_nl as object).length === 0);
+      
+      return (
+        <div className="space-y-2">
+          {needsTranslation && (
+            <TranslationStatus
+              type="revision_asset"
+              id={asset.id}
+              translationStatus={asset.translation_status}
+              hasTranslation={false}
+            />
+          )}
+          {renderContent(content)}
+        </div>
+      );
+    }
+
+    return (
+      <div className="text-center py-8 space-y-4">
+        <p className="text-muted-foreground">{description}</p>
+        {renderGenerateButton(assetType, label)}
+      </div>
+    );
+  };
+
   return (
     <Dialog open={!!topicId} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookOpen className="h-5 w-5" />
-            {topicLoading ? 'Loading...' : topic?.title || 'Topic Details'}
+            {topicLoading ? 'Loading...' : getTopicTitle()}
           </DialogTitle>
         </DialogHeader>
 
@@ -115,65 +180,72 @@ export function TopicDetailDialog({ topicId, onClose }: TopicDetailDialogProps) 
 
           <div className="flex-1 overflow-y-auto mt-4">
             <TabsContent value="summary" className="mt-0">
-              {summaryLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-              ) : summaryAsset?.generated_at && summaryAsset.content ? (
-                <SummaryTab content={summaryAsset.content as unknown as SummaryContent} onRegenerate={() => handleGenerate('summary')} isRegenerating={isGenerating('summary')} />
-              ) : (
-                <div className="text-center py-8 space-y-4">
-                  <p className="text-muted-foreground">Generate a comprehensive summary of this topic.</p>
-                  {renderGenerateButton('summary', 'Summary')}
-                </div>
+              {renderAssetWithTranslation(
+                'summary',
+                summaryAsset,
+                summaryLoading,
+                'Summary',
+                'Generate a comprehensive summary of this topic.',
+                (content) => (
+                  <SummaryTab 
+                    content={content as SummaryContent} 
+                    onRegenerate={() => handleGenerate('summary')} 
+                    isRegenerating={isGenerating('summary')} 
+                  />
+                )
               )}
             </TabsContent>
 
             <TabsContent value="keywords" className="mt-0">
-              {keywordsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-              ) : keywordsAsset?.generated_at && keywordsAsset.content ? (
-                <KeywordsTab content={keywordsAsset.content as unknown as KeywordsContent} onRegenerate={() => handleGenerate('keywords')} isRegenerating={isGenerating('keywords')} />
-              ) : (
-                <div className="text-center py-8 space-y-4">
-                  <p className="text-muted-foreground">Extract key terms and definitions from this topic.</p>
-                  {renderGenerateButton('keywords', 'Key Terms')}
-                </div>
+              {renderAssetWithTranslation(
+                'keywords',
+                keywordsAsset,
+                keywordsLoading,
+                'Key Terms',
+                'Extract key terms and definitions from this topic.',
+                (content) => (
+                  <KeywordsTab 
+                    content={content as KeywordsContent} 
+                    onRegenerate={() => handleGenerate('keywords')} 
+                    isRegenerating={isGenerating('keywords')} 
+                  />
+                )
               )}
             </TabsContent>
 
             <TabsContent value="flashcards" className="mt-0">
-              {flashcardsLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-              ) : flashcardsAsset?.generated_at && flashcardsAsset.content ? (
-                <FlashcardsTab content={flashcardsAsset.content as unknown as FlashcardContent} onRegenerate={() => handleGenerate('flashcards')} isRegenerating={isGenerating('flashcards')} />
-              ) : (
-                <div className="text-center py-8 space-y-4">
-                  <p className="text-muted-foreground">Create flashcards for effective memorization.</p>
-                  {renderGenerateButton('flashcards', 'Flashcards')}
-                </div>
+              {renderAssetWithTranslation(
+                'flashcards',
+                flashcardsAsset,
+                flashcardsLoading,
+                'Flashcards',
+                'Create flashcards for effective memorization.',
+                (content) => (
+                  <FlashcardsTab 
+                    content={content as FlashcardContent} 
+                    onRegenerate={() => handleGenerate('flashcards')} 
+                    isRegenerating={isGenerating('flashcards')} 
+                  />
+                )
               )}
             </TabsContent>
 
             <TabsContent value="quiz" className="mt-0">
-              {quizLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin" />
-                </div>
-              ) : quizAsset?.generated_at && quizAsset.content ? (
-                <QuizTab content={quizAsset.content as unknown as QuizContent} onRegenerate={() => handleGenerate('quiz')} isRegenerating={isGenerating('quiz')} />
-              ) : (
-                <div className="text-center py-8 space-y-4">
-                  <p className="text-muted-foreground">Test your understanding with a quiz.</p>
-                  {renderGenerateButton('quiz', 'Quiz')}
-                </div>
+              {renderAssetWithTranslation(
+                'quiz',
+                quizAsset,
+                quizLoading,
+                'Quiz',
+                'Test your understanding with a quiz.',
+                (content) => (
+                  <QuizTab 
+                    content={content as QuizContent} 
+                    onRegenerate={() => handleGenerate('quiz')} 
+                    isRegenerating={isGenerating('quiz')} 
+                  />
+                )
               )}
             </TabsContent>
-
             <TabsContent value="notes" className="mt-0">
               <div className="space-y-4">
                 <div className="flex items-center justify-between">

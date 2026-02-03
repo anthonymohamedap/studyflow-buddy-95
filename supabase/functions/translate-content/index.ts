@@ -1,0 +1,364 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+};
+
+interface TranslateRequest {
+  type: "chapter" | "topic" | "revision_asset";
+  id: string;
+}
+
+interface BulkTranslateRequest {
+  type: "course" | "document";
+  id: string;
+}
+
+// deno-lint-ignore no-explicit-any
+type SupabaseClient = any;
+
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
+
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+    const body = await req.json();
+    const { type, id, bulk } = body;
+
+    if (bulk) {
+      return await handleBulkTranslation(supabase, lovableApiKey, body as BulkTranslateRequest);
+    }
+
+    return await handleSingleTranslation(supabase, lovableApiKey, { type, id } as TranslateRequest);
+  } catch (error) {
+    console.error("Translation error:", error);
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+});
+
+async function translateText(lovableApiKey: string, text: string, context: string): Promise<string> {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${lovableApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional translator specializing in academic content. Translate the following ${context} from English to Dutch.
+
+CRITICAL RULES:
+1. Translate ONLY the provided text - do not add, remove, or modify any information
+2. Maintain the exact same structure and formatting
+3. Keep technical terms that are commonly used in English in academic contexts
+4. If the text is already in Dutch, return it as-is
+5. Preserve any markdown formatting, bullet points, or special characters
+6. Return ONLY the translated text, no explanations or notes`,
+        },
+        {
+          role: "user",
+          content: text,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Translation API error: ${error}`);
+  }
+
+  const data = await response.json();
+  return data.choices[0]?.message?.content || text;
+}
+
+async function translateJSON(lovableApiKey: string, content: Record<string, unknown>, assetType: string): Promise<Record<string, unknown>> {
+  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${lovableApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "google/gemini-3-flash-preview",
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional translator for academic content. Translate the following ${assetType} JSON content from English to Dutch.
+
+CRITICAL RULES:
+1. Translate ONLY text values - keep all JSON keys unchanged
+2. Do not add, remove, or modify any information
+3. Maintain the exact same JSON structure
+4. Keep technical terms that are commonly used in English in academic contexts
+5. Return ONLY valid JSON, no explanations
+6. For flashcards: translate both questions and answers
+7. For quizzes: translate questions, options, correctAnswer, and explanation
+8. For summaries: translate mainPoints, detailedExplanation, and keyTakeaways
+9. For keywords: translate term and definition`,
+        },
+        {
+          role: "user",
+          content: JSON.stringify(content, null, 2),
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Translation API error: ${error}`);
+  }
+
+  const data = await response.json();
+  const translatedText = data.choices[0]?.message?.content || "";
+  
+  const jsonMatch = translatedText.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, translatedText];
+  const jsonStr = jsonMatch[1] || translatedText;
+  
+  try {
+    return JSON.parse(jsonStr.trim());
+  } catch {
+    console.error("Failed to parse translated JSON:", jsonStr);
+    return content;
+  }
+}
+
+async function handleSingleTranslation(
+  supabase: SupabaseClient,
+  lovableApiKey: string,
+  request: TranslateRequest
+): Promise<Response> {
+  const { type, id } = request;
+
+  if (type === "chapter") {
+    await supabase
+      .from("document_chapters")
+      .update({ translation_status: "translating" })
+      .eq("id", id);
+
+    const { data: chapter, error } = await supabase
+      .from("document_chapters")
+      .select("title, content")
+      .eq("id", id)
+      .single();
+
+    if (error || !chapter) {
+      return new Response(
+        JSON.stringify({ error: "Chapter not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      const titleNl = await translateText(lovableApiKey, chapter.title, "chapter title");
+      const contentNl = chapter.content 
+        ? await translateText(lovableApiKey, chapter.content, "chapter content")
+        : null;
+
+      await supabase
+        .from("document_chapters")
+        .update({
+          title_nl: titleNl,
+          content_nl: contentNl,
+          translation_status: "completed",
+        })
+        .eq("id", id);
+
+      return new Response(
+        JSON.stringify({ success: true, title_nl: titleNl }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (error) {
+      await supabase
+        .from("document_chapters")
+        .update({ translation_status: "failed" })
+        .eq("id", id);
+      throw error;
+    }
+  }
+
+  if (type === "topic") {
+    await supabase
+      .from("document_topics")
+      .update({ translation_status: "translating" })
+      .eq("id", id);
+
+    const { data: topic, error } = await supabase
+      .from("document_topics")
+      .select("title, content")
+      .eq("id", id)
+      .single();
+
+    if (error || !topic) {
+      return new Response(
+        JSON.stringify({ error: "Topic not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      const titleNl = await translateText(lovableApiKey, topic.title, "topic title");
+      const contentNl = topic.content 
+        ? await translateText(lovableApiKey, topic.content, "topic content")
+        : null;
+
+      await supabase
+        .from("document_topics")
+        .update({
+          title_nl: titleNl,
+          content_nl: contentNl,
+          translation_status: "completed",
+        })
+        .eq("id", id);
+
+      return new Response(
+        JSON.stringify({ success: true, title_nl: titleNl }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (error) {
+      await supabase
+        .from("document_topics")
+        .update({ translation_status: "failed" })
+        .eq("id", id);
+      throw error;
+    }
+  }
+
+  if (type === "revision_asset") {
+    await supabase
+      .from("revision_assets")
+      .update({ translation_status: "translating" })
+      .eq("id", id);
+
+    const { data: asset, error } = await supabase
+      .from("revision_assets")
+      .select("content, asset_type")
+      .eq("id", id)
+      .single();
+
+    if (error || !asset) {
+      return new Response(
+        JSON.stringify({ error: "Revision asset not found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    try {
+      const contentNl = await translateJSON(
+        lovableApiKey, 
+        asset.content as Record<string, unknown>, 
+        asset.asset_type
+      );
+
+      await supabase
+        .from("revision_assets")
+        .update({
+          content_nl: contentNl,
+          translation_status: "completed",
+        })
+        .eq("id", id);
+
+      return new Response(
+        JSON.stringify({ success: true, content_nl: contentNl }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (error) {
+      await supabase
+        .from("revision_assets")
+        .update({ translation_status: "failed" })
+        .eq("id", id);
+      throw error;
+    }
+  }
+
+  return new Response(
+    JSON.stringify({ error: "Invalid type" }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}
+
+async function handleBulkTranslation(
+  supabase: SupabaseClient,
+  lovableApiKey: string,
+  request: BulkTranslateRequest
+): Promise<Response> {
+  const { type, id } = request;
+
+  if (type === "course") {
+    const { data: theoryTopics } = await supabase
+      .from("theory_topics")
+      .select("id")
+      .eq("course_id", id);
+
+    if (!theoryTopics?.length) {
+      return new Response(
+        JSON.stringify({ success: true, message: "No topics to translate" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    let translatedCount = 0;
+
+    for (const topic of theoryTopics) {
+      const { data: chapters } = await supabase
+        .from("document_chapters")
+        .select("id")
+        .eq("theory_topic_id", topic.id)
+        .eq("translation_status", "pending");
+
+      for (const chapter of chapters || []) {
+        await handleSingleTranslation(supabase, lovableApiKey, { type: "chapter", id: chapter.id });
+        translatedCount++;
+
+        const { data: docTopics } = await supabase
+          .from("document_topics")
+          .select("id")
+          .eq("chapter_id", chapter.id)
+          .eq("translation_status", "pending");
+
+        for (const docTopic of docTopics || []) {
+          await handleSingleTranslation(supabase, lovableApiKey, { type: "topic", id: docTopic.id });
+          translatedCount++;
+
+          const { data: assets } = await supabase
+            .from("revision_assets")
+            .select("id")
+            .eq("topic_id", docTopic.id)
+            .eq("translation_status", "pending");
+
+          for (const asset of assets || []) {
+            await handleSingleTranslation(supabase, lovableApiKey, { type: "revision_asset", id: asset.id });
+            translatedCount++;
+          }
+        }
+      }
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, translatedCount }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  return new Response(
+    JSON.stringify({ error: "Invalid bulk type" }),
+    { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+  );
+}

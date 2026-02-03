@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useDocumentChapters, useParseDocument } from '@/hooks/useDocumentStructure';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { TranslationStatus } from '@/components/TranslationStatus';
 import { cn } from '@/lib/utils';
 import { TopicDetailDialog } from './TopicDetailDialog';
 
@@ -22,9 +24,18 @@ export function DocumentOutline({
   parsingStatus,
 }: DocumentOutlineProps) {
   const { data: chapters, isLoading } = useDocumentChapters(theoryTopicId);
+  const { language } = useLanguage();
   const parseDocument = useParseDocument();
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(new Set());
+
+  // Helper to get translated title
+  const getTitle = (item: { title: string; title_nl?: string | null }) => {
+    if (language === 'nl' && item.title_nl) {
+      return item.title_nl;
+    }
+    return item.title;
+  };
 
   const toggleChapter = (chapterId: string) => {
     setExpandedChapters(prev => {
@@ -121,8 +132,15 @@ export function DocumentOutline({
                 ) : (
                   <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
                 )}
-                <span className="text-sm font-medium truncate">{chapter.title}</span>
-                <Badge variant="outline" className="ml-auto text-xs shrink-0">
+                <span className="text-sm font-medium truncate flex-1">{getTitle(chapter)}</span>
+                <TranslationStatus
+                  type="chapter"
+                  id={chapter.id}
+                  translationStatus={chapter.translation_status}
+                  hasTranslation={!!chapter.title_nl}
+                  compact
+                />
+                <Badge variant="outline" className="text-xs shrink-0">
                   {chapter.topics.length}
                 </Badge>
               </button>
@@ -140,7 +158,14 @@ export function DocumentOutline({
                     )}
                   >
                     <FileText className="h-3.5 w-3.5 shrink-0" />
-                    <span className="truncate">{topic.title}</span>
+                    <span className="truncate flex-1">{getTitle(topic)}</span>
+                    <TranslationStatus
+                      type="topic"
+                      id={topic.id}
+                      translationStatus={topic.translation_status}
+                      hasTranslation={!!topic.title_nl}
+                      compact
+                    />
                   </button>
                 ))}
               </div>

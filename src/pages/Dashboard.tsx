@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCourses } from '@/hooks/useCourses';
-import { useExercises } from '@/hooks/useExercises';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +23,7 @@ import {
 import { AddCourseDialog } from '@/components/AddCourseDialog';
 import { CourseProgress } from '@/components/CourseProgress';
 import { SmartCalendar } from '@/components/calendar';
+import { LanguageToggle } from '@/components/LanguageToggle';
 
 const COURSE_COLORS = [
   'bg-gradient-to-br from-blue-500 to-blue-600',
@@ -67,10 +67,13 @@ export default function Dashboard() {
                 <p className="text-xs text-muted-foreground">Welcome back, {user?.email?.split('@')[0]}</p>
               </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={signOut}>
-              <LogOut className="h-4 w-4 mr-2" />
-              Sign Out
-            </Button>
+            <div className="flex items-center gap-2">
+              <LanguageToggle />
+              <Button variant="ghost" size="sm" onClick={signOut}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       </header>
