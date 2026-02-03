@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.parse-lab]
 verify_jwt = false
+
+[functions.ai-study-assistant]
+verify_jwt = false
