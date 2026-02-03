@@ -211,6 +211,7 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
                     topic={topic}
                     onStatusChange={handleStatusChange}
                     onDelete={(id) => deleteTopic.mutate(id)}
+                    onUpdate={(id, data) => updateTopic.mutate({ id, ...data })}
                   />
                 ))}
               </div>
