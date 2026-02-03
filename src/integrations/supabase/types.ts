@@ -168,6 +168,7 @@ export type Database = {
       document_chapters: {
         Row: {
           content: string | null
+          content_nl: string | null
           created_at: string
           id: string
           page_end: number | null
@@ -175,10 +176,13 @@ export type Database = {
           sort_order: number | null
           theory_topic_id: string
           title: string
+          title_nl: string | null
+          translation_status: string | null
           updated_at: string
         }
         Insert: {
           content?: string | null
+          content_nl?: string | null
           created_at?: string
           id?: string
           page_end?: number | null
@@ -186,10 +190,13 @@ export type Database = {
           sort_order?: number | null
           theory_topic_id: string
           title: string
+          title_nl?: string | null
+          translation_status?: string | null
           updated_at?: string
         }
         Update: {
           content?: string | null
+          content_nl?: string | null
           created_at?: string
           id?: string
           page_end?: number | null
@@ -197,6 +204,8 @@ export type Database = {
           sort_order?: number | null
           theory_topic_id?: string
           title?: string
+          title_nl?: string | null
+          translation_status?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -213,28 +222,37 @@ export type Database = {
         Row: {
           chapter_id: string
           content: string | null
+          content_nl: string | null
           created_at: string
           id: string
           sort_order: number | null
           title: string
+          title_nl: string | null
+          translation_status: string | null
           updated_at: string
         }
         Insert: {
           chapter_id: string
           content?: string | null
+          content_nl?: string | null
           created_at?: string
           id?: string
           sort_order?: number | null
           title: string
+          title_nl?: string | null
+          translation_status?: string | null
           updated_at?: string
         }
         Update: {
           chapter_id?: string
           content?: string | null
+          content_nl?: string | null
           created_at?: string
           id?: string
           sort_order?: number | null
           title?: string
+          title_nl?: string | null
+          translation_status?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -354,31 +372,37 @@ export type Database = {
         Row: {
           asset_type: string
           content: Json
+          content_nl: Json | null
           created_at: string
           generated_at: string | null
           id: string
           is_generating: boolean | null
           topic_id: string
+          translation_status: string | null
           updated_at: string
         }
         Insert: {
           asset_type: string
           content?: Json
+          content_nl?: Json | null
           created_at?: string
           generated_at?: string | null
           id?: string
           is_generating?: boolean | null
           topic_id: string
+          translation_status?: string | null
           updated_at?: string
         }
         Update: {
           asset_type?: string
           content?: Json
+          content_nl?: Json | null
           created_at?: string
           generated_at?: string | null
           id?: string
           is_generating?: boolean | null
           topic_id?: string
+          translation_status?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -519,6 +543,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_preferences: {
+        Row: {
+          created_at: string
+          id: string
+          preferred_language: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          preferred_language?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          preferred_language?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       week_plans: {
         Row: {

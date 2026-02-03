@@ -9,8 +9,10 @@ interface RevisionAsset {
   topic_id: string;
   asset_type: AssetType;
   content: Record<string, unknown>;
+  content_nl: Record<string, unknown> | null;
   generated_at: string | null;
   is_generating: boolean;
+  translation_status: string | null;
   created_at: string;
   updated_at: string;
 }

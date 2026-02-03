@@ -6,10 +6,13 @@ interface Chapter {
   id: string;
   theory_topic_id: string;
   title: string;
+  title_nl: string | null;
   content: string | null;
+  content_nl: string | null;
   page_start: number | null;
   page_end: number | null;
   sort_order: number | null;
+  translation_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -18,8 +21,11 @@ interface Topic {
   id: string;
   chapter_id: string;
   title: string;
+  title_nl: string | null;
   content: string | null;
+  content_nl: string | null;
   sort_order: number | null;
+  translation_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -27,6 +33,8 @@ interface Topic {
 interface ChapterWithTopics extends Chapter {
   topics: Topic[];
 }
+
+export type { Chapter, Topic, ChapterWithTopics };
 
 export function useDocumentChapters(theoryTopicId: string | undefined) {
   return useQuery({
