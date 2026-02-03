@@ -14,100 +14,9 @@ export type Database = {
   }
   public: {
     Tables: {
-      calendar_event_links: {
-        Row: {
-          all_day: boolean | null
-          color: string | null
-          course_id: string | null
-          created_at: string
-          end_date: string
-          event_type: string
-          exercise_id: string | null
-          google_event_id: string
-          id: string
-          lab_id: string | null
-          metadata: Json | null
-          priority: string | null
-          project_id: string | null
-          start_date: string
-          status: string | null
-          title: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          all_day?: boolean | null
-          color?: string | null
-          course_id?: string | null
-          created_at?: string
-          end_date: string
-          event_type: string
-          exercise_id?: string | null
-          google_event_id: string
-          id?: string
-          lab_id?: string | null
-          metadata?: Json | null
-          priority?: string | null
-          project_id?: string | null
-          start_date: string
-          status?: string | null
-          title: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          all_day?: boolean | null
-          color?: string | null
-          course_id?: string | null
-          created_at?: string
-          end_date?: string
-          event_type?: string
-          exercise_id?: string | null
-          google_event_id?: string
-          id?: string
-          lab_id?: string | null
-          metadata?: Json | null
-          priority?: string | null
-          project_id?: string | null
-          start_date?: string
-          status?: string | null
-          title?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "calendar_event_links_course_id_fkey"
-            columns: ["course_id"]
-            isOneToOne: false
-            referencedRelation: "courses"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "calendar_event_links_exercise_id_fkey"
-            columns: ["exercise_id"]
-            isOneToOne: false
-            referencedRelation: "exercises"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "calendar_event_links_lab_id_fkey"
-            columns: ["lab_id"]
-            isOneToOne: false
-            referencedRelation: "lab_documents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "calendar_event_links_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       calendar_events: {
         Row: {
+          actual_duration: number | null
           all_day: boolean
           category: string
           color: string | null
@@ -115,17 +24,28 @@ export type Database = {
           created_at: string
           description: string | null
           end_date: string
+          estimated_duration: number | null
           event_type: string
+          exercise_id: string | null
+          feedback: string | null
           id: string
+          lab_id: string | null
           location: string | null
+          notes: string | null
+          priority: string | null
+          project_id: string | null
           recurrence: string | null
           recurrence_end_date: string | null
+          redo_for_exam: boolean | null
           start_date: string
+          status: string | null
           title: string
+          topic_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          actual_duration?: number | null
           all_day?: boolean
           category: string
           color?: string | null
@@ -133,17 +53,28 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_date: string
+          estimated_duration?: number | null
           event_type: string
+          exercise_id?: string | null
+          feedback?: string | null
           id?: string
+          lab_id?: string | null
           location?: string | null
+          notes?: string | null
+          priority?: string | null
+          project_id?: string | null
           recurrence?: string | null
           recurrence_end_date?: string | null
+          redo_for_exam?: boolean | null
           start_date: string
+          status?: string | null
           title: string
+          topic_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          actual_duration?: number | null
           all_day?: boolean
           category?: string
           color?: string | null
@@ -151,13 +82,23 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_date?: string
+          estimated_duration?: number | null
           event_type?: string
+          exercise_id?: string | null
+          feedback?: string | null
           id?: string
+          lab_id?: string | null
           location?: string | null
+          notes?: string | null
+          priority?: string | null
+          project_id?: string | null
           recurrence?: string | null
           recurrence_end_date?: string | null
+          redo_for_exam?: boolean | null
           start_date?: string
+          status?: string | null
           title?: string
+          topic_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -167,6 +108,34 @@ export type Database = {
             columns: ["course_id"]
             isOneToOne: false
             referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_exercise_id_fkey"
+            columns: ["exercise_id"]
+            isOneToOne: false
+            referencedRelation: "exercises"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_lab_id_fkey"
+            columns: ["lab_id"]
+            isOneToOne: false
+            referencedRelation: "lab_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calendar_events_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "document_topics"
             referencedColumns: ["id"]
           },
         ]
@@ -412,45 +381,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      google_tokens: {
-        Row: {
-          access_token: string
-          calendar_id: string | null
-          created_at: string
-          id: string
-          last_synced_at: string | null
-          refresh_token: string
-          sync_token: string | null
-          token_expires_at: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          access_token: string
-          calendar_id?: string | null
-          created_at?: string
-          id?: string
-          last_synced_at?: string | null
-          refresh_token: string
-          sync_token?: string | null
-          token_expires_at: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          access_token?: string
-          calendar_id?: string | null
-          created_at?: string
-          id?: string
-          last_synced_at?: string | null
-          refresh_token?: string
-          sync_token?: string | null
-          token_expires_at?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
       }
       lab_assets: {
         Row: {

@@ -1,6 +1,8 @@
 import { useState, useCallback, useMemo } from 'react';
 import { 
   format, 
+  addDays,
+  subDays,
   addWeeks, 
   subWeeks, 
   addMonths, 
@@ -11,6 +13,7 @@ import {
   endOfWeek,
   startOfMonth,
   endOfMonth,
+  startOfDay,
   setHours,
   setMinutes
 } from 'date-fns';
@@ -41,29 +44,29 @@ import {
   Clock,
   GraduationCap,
   Plus,
-  Loader2,
-  Link2
+  Loader2
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { WeekView } from './WeekView';
 import { MonthView } from './MonthView';
 import { YearView } from './YearView';
+import { DayView } from './DayView';
+import { AgendaView } from './AgendaView';
 import { MiniCalendar } from './MiniCalendar';
 import { SmartPlanner } from './SmartPlanner';
 import { CalendarEventDialog, type CalendarEventFormData } from './CalendarEventDialog';
 import { EnhancedEventDialog } from './EnhancedEventDialog';
-import { GoogleCalendarConnect } from './GoogleCalendarConnect';
 import { useCalendarEvents } from '@/hooks/useCalendarEvents';
 import { useDbCalendarEvents, type ExpandedCalendarEvent, type CalendarEventFormData as DbEventFormData } from '@/hooks/useDbCalendarEvents';
-import { useGoogleCalendar } from '@/hooks/useGoogleCalendar';
 import { useAuth } from '@/contexts/AuthContext';
 import { 
   ACADEMIC_EVENTS,
   getSemesterWeek,
   type ScheduleBlock
 } from '@/data/academicCalendar';
-import type { CalendarViewMode } from '@/types/calendar';
 import type { Database } from '@/integrations/supabase/types';
+
+type CalendarViewMode = 'day' | 'week' | 'month' | 'year' | 'agenda';
 
 type Exercise = Database['public']['Tables']['exercises']['Row'];
 type Project = Database['public']['Tables']['projects']['Row'];
@@ -91,15 +94,6 @@ export function SmartCalendar({
   const [isExpanded, setIsExpanded] = useState(defaultExpanded);
   const [selectedCourses, setSelectedCourses] = useState<string[]>([]);
   const [showSmartPlanner, setShowSmartPlanner] = useState(true);
-  const [showGoogleConnect, setShowGoogleConnect] = useState(false);
-  
-  // Google Calendar hook
-  const { 
-    isConnected: isGoogleConnected, 
-    isCheckingConnection: isCheckingGoogle,
-    connect: connectGoogle,
-    isConnecting: isGoogleConnecting
-  } = useGoogleCalendar();
   
   // Legacy CRUD dialog state (for schedule blocks)
   const [legacyDialogOpen, setLegacyDialogOpen] = useState(false);
@@ -118,16 +112,35 @@ export function SmartCalendar({
   
   // Calculate date range for database query
   const dateRange = useMemo(() => {
-    const start = viewMode === 'year' 
-      ? new Date('2025-09-01')
-      : viewMode === 'month' 
-        ? startOfMonth(selectedDate)
-        : startOfWeek(selectedDate, { weekStartsOn: 1 });
-    const end = viewMode === 'year'
-      ? new Date('2026-09-01')
-      : viewMode === 'month'
-        ? endOfMonth(selectedDate)
-        : endOfWeek(selectedDate, { weekStartsOn: 1 });
+    let start: Date;
+    let end: Date;
+    
+    switch (viewMode) {
+      case 'day':
+        start = startOfDay(selectedDate);
+        end = addDays(start, 1);
+        break;
+      case 'week':
+        start = startOfWeek(selectedDate, { weekStartsOn: 1 });
+        end = endOfWeek(selectedDate, { weekStartsOn: 1 });
+        break;
+      case 'month':
+        start = startOfMonth(selectedDate);
+        end = endOfMonth(selectedDate);
+        break;
+      case 'year':
+        start = new Date('2025-09-01');
+        end = new Date('2026-09-01');
+        break;
+      case 'agenda':
+        start = startOfDay(selectedDate);
+        end = addDays(start, 14);
+        break;
+      default:
+        start = startOfWeek(selectedDate, { weekStartsOn: 1 });
+        end = endOfWeek(selectedDate, { weekStartsOn: 1 });
+    }
+    
     return { start, end };
   }, [selectedDate, viewMode]);
   
@@ -148,12 +161,16 @@ export function SmartCalendar({
   const navigate = useCallback((direction: 'prev' | 'next') => {
     setSelectedDate(prev => {
       switch (viewMode) {
+        case 'day':
+          return direction === 'next' ? addDays(prev, 1) : subDays(prev, 1);
         case 'week':
           return direction === 'next' ? addWeeks(prev, 1) : subWeeks(prev, 1);
         case 'month':
           return direction === 'next' ? addMonths(prev, 1) : subMonths(prev, 1);
         case 'year':
           return direction === 'next' ? addYears(prev, 1) : subYears(prev, 1);
+        case 'agenda':
+          return direction === 'next' ? addWeeks(prev, 2) : subWeeks(prev, 2);
         default:
           return prev;
       }
@@ -255,6 +272,8 @@ END:VCALENDAR`;
   // Get view title
   const getViewTitle = () => {
     switch (viewMode) {
+      case 'day':
+        return format(selectedDate, 'EEEE, MMMM d, yyyy');
       case 'week':
         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
         const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
@@ -263,6 +282,8 @@ END:VCALENDAR`;
         return format(selectedDate, 'MMMM yyyy');
       case 'year':
         return 'Academic Year 2025-2026';
+      case 'agenda':
+        return `${format(selectedDate, 'd MMM')} - ${format(addDays(selectedDate, 14), 'd MMM yyyy')}`;
       default:
         return '';
     }
@@ -361,9 +382,11 @@ END:VCALENDAR`;
               {/* View mode tabs */}
               <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as CalendarViewMode)}>
                 <TabsList>
+                  <TabsTrigger value="day">Day</TabsTrigger>
                   <TabsTrigger value="week">Week</TabsTrigger>
                   <TabsTrigger value="month">Month</TabsTrigger>
                   <TabsTrigger value="year">Year</TabsTrigger>
+                  <TabsTrigger value="agenda">Agenda</TabsTrigger>
                 </TabsList>
               </Tabs>
 
@@ -415,27 +438,6 @@ END:VCALENDAR`;
                   </PopoverContent>
                 </Popover>
               )}
-
-              {/* Google Calendar Connect */}
-              <Popover open={showGoogleConnect} onOpenChange={setShowGoogleConnect}>
-                <PopoverTrigger asChild>
-                  <Button 
-                    variant={isGoogleConnected ? "default" : "outline"} 
-                    size="sm"
-                    disabled={isCheckingGoogle}
-                  >
-                    {isCheckingGoogle ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Link2 className="h-4 w-4 mr-2" />
-                    )}
-                    {isGoogleConnected ? "Google Connected" : "Connect Google"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80 p-0">
-                  <GoogleCalendarConnect />
-                </PopoverContent>
-              </Popover>
 
               {/* Sync to phone */}
               <Popover>
@@ -536,6 +538,18 @@ END:VCALENDAR`;
             exit={{ opacity: 0, x: 10 }}
             transition={{ duration: 0.2 }}
           >
+            {viewMode === 'day' && (
+              <DayView
+                selectedDate={selectedDate}
+                exercises={exercises}
+                project={project}
+                deliverables={deliverables}
+                scheduleBlocks={scheduleBlocks}
+                dbEvents={dbEvents}
+                onAddDbEvent={isAuthenticated ? handleAddDbEvent : undefined}
+                onEditDbEvent={isAuthenticated ? handleEditDbEvent : undefined}
+              />
+            )}
             {viewMode === 'week' && (
               <WeekView 
                 selectedDate={selectedDate}
@@ -579,6 +593,17 @@ END:VCALENDAR`;
                   setSelectedDate(date);
                   setViewMode('month');
                 }}
+              />
+            )}
+            {viewMode === 'agenda' && (
+              <AgendaView
+                selectedDate={selectedDate}
+                exercises={exercises}
+                project={project}
+                deliverables={deliverables}
+                dbEvents={dbEvents}
+                onAddDbEvent={isAuthenticated ? handleAddDbEvent : undefined}
+                onEditDbEvent={isAuthenticated ? handleEditDbEvent : undefined}
               />
             )}
           </motion.div>

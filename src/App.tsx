@@ -9,7 +9,7 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import CourseDetail from "./pages/CourseDetail";
-import CalendarCallback from "./pages/CalendarCallback";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,14 +37,6 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <CourseDetail />
-                  </ProtectedRoute>
-                } 
-              />
-              <Route 
-                path="/calendar-callback" 
-                element={
-                  <ProtectedRoute>
-                    <CalendarCallback />
                   </ProtectedRoute>
                 } 
               />
