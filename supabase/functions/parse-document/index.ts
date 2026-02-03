@@ -116,10 +116,37 @@ If the document has no clear structure, create logical groupings with descriptiv
     try {
       const rawContent = aiResult.choices[0].message.content;
       // Strip markdown code blocks if present
-      const cleanedContent = rawContent
+      let cleanedContent = rawContent
         .replace(/```json\s*/gi, "")
         .replace(/```\s*/g, "")
         .trim();
+      
+      // Find JSON boundaries - handle both objects and arrays
+      const jsonStart = cleanedContent.search(/[\[{]/);
+      if (jsonStart === -1) {
+        throw new Error("No JSON object or array found in response");
+      }
+      
+      // Find the matching closing bracket
+      const startChar = cleanedContent[jsonStart];
+      const endChar = startChar === '{' ? '}' : ']';
+      let depth = 0;
+      let jsonEnd = -1;
+      
+      for (let i = jsonStart; i < cleanedContent.length; i++) {
+        if (cleanedContent[i] === startChar) depth++;
+        if (cleanedContent[i] === endChar) depth--;
+        if (depth === 0) {
+          jsonEnd = i;
+          break;
+        }
+      }
+      
+      if (jsonEnd === -1) {
+        throw new Error("Malformed JSON - unbalanced brackets");
+      }
+      
+      cleanedContent = cleanedContent.substring(jsonStart, jsonEnd + 1);
       
       let parsed = JSON.parse(cleanedContent);
       
