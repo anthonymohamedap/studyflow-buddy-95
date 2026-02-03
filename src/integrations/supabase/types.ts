@@ -321,6 +321,168 @@ export type Database = {
           },
         ]
       }
+      lab_assets: {
+        Row: {
+          asset_type: string
+          content: Json
+          content_nl: Json | null
+          created_at: string
+          generated_at: string | null
+          id: string
+          is_generating: boolean | null
+          lab_id: string
+          translation_status: string | null
+          updated_at: string
+        }
+        Insert: {
+          asset_type: string
+          content?: Json
+          content_nl?: Json | null
+          created_at?: string
+          generated_at?: string | null
+          id?: string
+          is_generating?: boolean | null
+          lab_id: string
+          translation_status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          asset_type?: string
+          content?: Json
+          content_nl?: Json | null
+          created_at?: string
+          generated_at?: string | null
+          id?: string
+          is_generating?: boolean | null
+          lab_id?: string
+          translation_status?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_assets_lab_id_fkey"
+            columns: ["lab_id"]
+            isOneToOne: false
+            referencedRelation: "lab_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lab_documents: {
+        Row: {
+          course_id: string
+          created_at: string
+          deadline: string | null
+          description: string | null
+          description_nl: string | null
+          file_path: string | null
+          id: string
+          parsed_at: string | null
+          parsing_error: string | null
+          parsing_status: string | null
+          sort_order: number | null
+          source_url: string | null
+          status: string
+          title: string
+          title_nl: string | null
+          translation_status: string | null
+          updated_at: string
+          week_number: number | null
+        }
+        Insert: {
+          course_id: string
+          created_at?: string
+          deadline?: string | null
+          description?: string | null
+          description_nl?: string | null
+          file_path?: string | null
+          id?: string
+          parsed_at?: string | null
+          parsing_error?: string | null
+          parsing_status?: string | null
+          sort_order?: number | null
+          source_url?: string | null
+          status?: string
+          title: string
+          title_nl?: string | null
+          translation_status?: string | null
+          updated_at?: string
+          week_number?: number | null
+        }
+        Update: {
+          course_id?: string
+          created_at?: string
+          deadline?: string | null
+          description?: string | null
+          description_nl?: string | null
+          file_path?: string | null
+          id?: string
+          parsed_at?: string | null
+          parsing_error?: string | null
+          parsing_status?: string | null
+          sort_order?: number | null
+          source_url?: string | null
+          status?: string
+          title?: string
+          title_nl?: string | null
+          translation_status?: string | null
+          updated_at?: string
+          week_number?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_documents_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lab_sections: {
+        Row: {
+          content: string | null
+          content_nl: string | null
+          created_at: string
+          id: string
+          lab_id: string
+          section_type: string
+          sort_order: number | null
+          title: string | null
+          title_nl: string | null
+        }
+        Insert: {
+          content?: string | null
+          content_nl?: string | null
+          created_at?: string
+          id?: string
+          lab_id: string
+          section_type: string
+          sort_order?: number | null
+          title?: string | null
+          title_nl?: string | null
+        }
+        Update: {
+          content?: string | null
+          content_nl?: string | null
+          created_at?: string
+          id?: string
+          lab_id?: string
+          section_type?: string
+          sort_order?: number | null
+          title?: string | null
+          title_nl?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lab_sections_lab_id_fkey"
+            columns: ["lab_id"]
+            isOneToOne: false
+            referencedRelation: "lab_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           course_id: string
