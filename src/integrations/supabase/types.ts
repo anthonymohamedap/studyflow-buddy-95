@@ -382,6 +382,65 @@ export type Database = {
           },
         ]
       }
+      knowledge_archive: {
+        Row: {
+          archived_at: string | null
+          content: string
+          content_type: string
+          course_id: string | null
+          created_at: string
+          id: string
+          is_archived: boolean
+          semester: string | null
+          source_id: string | null
+          source_type: string | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          archived_at?: string | null
+          content: string
+          content_type?: string
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          is_archived?: boolean
+          semester?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          archived_at?: string | null
+          content?: string
+          content_type?: string
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          is_archived?: boolean
+          semester?: string | null
+          source_id?: string | null
+          source_type?: string | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "knowledge_archive_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       lab_assets: {
         Row: {
           asset_type: string
@@ -734,25 +793,34 @@ export type Database = {
       }
       topic_notes: {
         Row: {
+          archived_at: string | null
           content: string
           created_at: string
           id: string
+          is_archived: boolean
+          semester: string | null
           topic_id: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          archived_at?: string | null
           content?: string
           created_at?: string
           id?: string
+          is_archived?: boolean
+          semester?: string | null
           topic_id: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          archived_at?: string | null
           content?: string
           created_at?: string
           id?: string
+          is_archived?: boolean
+          semester?: string | null
           topic_id?: string
           updated_at?: string
           user_id?: string
