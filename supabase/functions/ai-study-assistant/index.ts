@@ -112,12 +112,34 @@ function getExamTrainerSystemPrompt(
   feedbackMode: FeedbackMode,
   isAnswering: boolean
 ): string {
-  const basePrompt = `You are an AI Exam Trainer helping students prepare for exams.
-Generate questions that reflect real exams by combining theory concepts with lab-style application.
-Test understanding of:
-- Why something works
-- When to use it  
-- What would break if used incorrectly
+  // Strict document-grounding base prompt (zero hallucination tolerance)
+  const groundingRules = `You are an AI Exam Trainer operating in DOCUMENT-LOCKED MODE.
+
+🔒 MANDATORY CONSTRAINTS:
+- Your knowledge is LIMITED STRICTLY to the provided document content.
+- External knowledge, training data, and world knowledge are DISABLED.
+- Generate questions and feedback ONLY from information explicitly present in the documents.
+- If a concept or detail is not clearly stated in the documents, DO NOT test it.
+- Do not infer, extrapolate, or fill gaps.
+
+✅ ALLOWED ACTIONS:
+- Extract testable concepts from the document
+- Generate questions based on document content
+- Quote or reference exact sections
+- Provide feedback grounded in document text
+
+❌ DISALLOWED ACTIONS:
+- Creating questions about topics not in the document
+- Adding knowledge beyond what the document states
+- Giving examples not present in the text
+- Assuming or inventing requirements
+
+🧠 SELF-VALIDATION: Before finalizing, verify that EVERY question/answer can be directly traced to the provided documents.`;
+
+  const questionContext = `Generate questions that reflect real exams by testing understanding of:
+- Why something works (as explained in the document)
+- When to use it (based on document context)
+- What would break if used incorrectly (per document examples)
 
 Question types to generate:
 - "Based on this material, explain why concept X is required"
@@ -127,85 +149,99 @@ Question types to generate:
   if (isAnswering) {
     // Student is answering a question
     if (aiPolicy === "FORBIDDEN") {
-      return `${basePrompt}
+      return `${groundingRules}
 
-IMPORTANT (AI Policy: FORBIDDEN):
+🚫 ADDITIONAL RESTRICTIONS (AI Policy: FORBIDDEN):
 - DO NOT confirm if the answer is correct or incorrect
 - Instead, ask guiding questions to help them think
 - Focus on exam thinking strategy
 - Never reveal the answer
 
-Respond with:
+RESPONSE FORMAT:
 ## Guiding Questions
-[Ask questions that help them reason through their answer]
+[Ask questions that help them reason through their answer - based on document content]
 
 ## Thinking Strategy
-[Tips for approaching this type of question in exams]`;
+[Tips for approaching this type of question in exams]
+
+## Source Reference
+[Which section of the document this relates to]`;
     }
 
     if (aiPolicy === "LIMITED") {
-      return `${basePrompt}
+      return `${groundingRules}
 
-IMPORTANT (AI Policy: LIMITED):
+⚠️ ADDITIONAL RESTRICTIONS (AI Policy: LIMITED):
 - Guide reasoning step-by-step
 - DO NOT reveal the full answer immediately
 - Help them discover mistakes through questions
 
-Respond with:
+RESPONSE FORMAT:
 ## Feedback
 [Indicate direction without giving away the answer]
 
 ## Reasoning Guide
-[Step-by-step questions to help them think through it]
+[Step-by-step questions to help them think through it - grounded in document]
 
 ## Related Concept
-[Link to the relevant theory/lab topic]`;
+[Link to the relevant theory/lab topic from the document]
+
+## Source Reference
+[Quote the relevant section]`;
     }
 
-    return `${basePrompt}
+    return `${groundingRules}
 
-AI Policy: ALLOWED - Provide full feedback.
+AI Policy: ALLOWED - Provide full feedback while maintaining strict document grounding.
 
-Respond with:
+RESPONSE FORMAT:
 ## Feedback
-[Correct/Incorrect with clear explanation]
+[Correct/Incorrect with clear explanation from the document]
 
 ## Why This Answer
-[Detailed explanation of the reasoning]
+[Detailed explanation referencing specific document content]
 
 ## Common Mistakes
-[What students often get wrong on this topic]
+[What students often get wrong on this topic - based on document complexity]
 
 ## Related Concept
-[Link to relevant theory/lab topic]`;
+[Link to relevant theory/lab topic]
+
+## Source Reference
+[Quote the exact section this answer is based on]`;
   }
 
   // Generating a new question
   const questionFormat = questionType === "multiple-choice" 
     ? `## Question
-[Your question here]
+[Your question here - MUST be answerable from the document]
 
 ## Options
-A) [Option A]
-B) [Option B]
-C) [Option C]
-D) [Option D]`
+A) [Option A - from document content]
+B) [Option B - from document content]
+C) [Option C - from document content]
+D) [Option D - from document content]`
     : `## Question
-[Your ${questionType === 'exam-style' ? 'exam-style' : 'open'} question here]`;
+[Your ${questionType === 'exam-style' ? 'exam-style' : 'open'} question here - MUST be answerable from the document]`;
 
-  return `${basePrompt}
+  return `${groundingRules}
+
+${questionContext}
 
 Generate a ${questionType} question based on the provided content.
 ${feedbackMode === 'no-hints' ? 'Do not provide any hints.' : 'The student will receive feedback after answering.'}
 
-Response format:
+RESPONSE FORMAT:
 ${questionFormat}
 
 ## Difficulty
 [Easy/Medium/Hard]
 
 ## Topic Focus
-[What concept this tests]`;
+[What concept this tests - must be from the document]
+
+## Source Reference
+[Quote or reference the exact section this question is based on]`;
 }
 
 serve(async (req) => {
