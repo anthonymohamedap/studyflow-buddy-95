@@ -6,6 +6,25 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Strict document-grounding preamble for zero hallucination tolerance
+const GROUNDING_PREAMBLE = `🔒 DOCUMENT-LOCKED MODE - ZERO HALLUCINATION TOLERANCE
+
+MANDATORY CONSTRAINTS:
+- Your knowledge is LIMITED STRICTLY to the document content provided below.
+- External knowledge, training data, and world knowledge are DISABLED.
+- Use ONLY information EXPLICITLY present in the document.
+- Do NOT use prior knowledge, assumptions, general knowledge, or external sources.
+- If information is not clearly stated in the document, respond with null or "Not found in document".
+- Do not infer, extrapolate, or fill gaps.
+- Keep all outputs concise and factual.
+
+✅ ALLOWED ACTIONS: Extract, Summarize, Quote
+❌ DISALLOWED ACTIONS: Explaining beyond document, Giving examples not in text, Combining ideas not explicitly combined
+
+🧠 SELF-VALIDATION: Before finalizing, verify EVERY item can be directly traced to the document. If not, remove it.
+
+---`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -63,8 +82,10 @@ serve(async (req) => {
       throw new Error("No document content available");
     }
 
-    // Parse document structure with AI
-    const structurePrompt = `You are analyzing a lab assignment document. Extract the following information:
+    // Parse document structure with AI (strict grounding)
+    const structurePrompt = `${GROUNDING_PREAMBLE}
+
+You are analyzing a lab assignment document. Extract the following information:
 
 1. A brief description of what this lab is about (2-3 sentences max)
 2. Any requirements or constraints mentioned
@@ -72,20 +93,21 @@ serve(async (req) => {
 4. Deliverables (what must be submitted)
 5. Evaluation criteria (if mentioned)
 
-IMPORTANT RULES:
+STRICT RULES:
 - Only extract information that is EXPLICITLY stated in the document
 - If a section is not found, set it to null
 - Do not invent or assume any requirements
 - Keep descriptions concise
+- Quote exact wording where possible
 
 Return your response as JSON in this exact format:
 {
-  "description": "Brief description of the lab",
+  "description": "Brief description of the lab (or null if not found)",
   "sections": [
     {
       "type": "description|requirements|tasks|deliverables|evaluation|other",
-      "title": "Section title if any",
-      "content": "Content of the section"
+      "title": "Section title if any (or null)",
+      "content": "Content of the section - use exact document wording"
     }
   ]
 }
@@ -102,7 +124,7 @@ ${documentContent.substring(0, 30000)}`;
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [{ role: "user", content: structurePrompt }],
-        temperature: 0.3,
+        temperature: 0.2, // Lower temperature for more factual extraction
       }),
     });
 
@@ -151,21 +173,26 @@ ${documentContent.substring(0, 30000)}`;
       }
     }
 
-    // Generate summary
-    const summaryPrompt = `Based on this lab assignment, create a brief summary with 3-6 bullet points that describe:
+    // Generate summary (strict grounding)
+    const summaryPrompt = `${GROUNDING_PREAMBLE}
+
+Based on this lab assignment, create a brief summary with 3-6 bullet points that describe:
 - What this lab is about
 - What the end result should be
 - Key skills or concepts being practiced
 
-IMPORTANT: Only include information from the document. If something is unclear, say "Not specified in material".
+STRICT RULES:
+- Only include information from the document
+- If something is unclear, say "Not specified in material"
+- Use document wording, not paraphrasing
 
 Document content:
 ${documentContent.substring(0, 20000)}
 
 Return JSON in this format:
 {
-  "title": "Lab title/name",
-  "bullets": ["Bullet 1", "Bullet 2", "Bullet 3"]
+  "title": "Lab title/name (from document)",
+  "bullets": ["Bullet 1 (document-based)", "Bullet 2", "Bullet 3"]
 }`;
 
     const summaryResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -177,7 +204,7 @@ Return JSON in this format:
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [{ role: "user", content: summaryPrompt }],
-        temperature: 0.3,
+        temperature: 0.2,
       }),
     });
 
@@ -195,19 +222,22 @@ Return JSON in this format:
       }
     }
 
-    // Generate approach plan (stappenplan)
-    const approachPrompt = `Create a step-by-step approach plan (stappenplan) for completing this lab assignment.
+    // Generate approach plan (stappenplan) with strict grounding
+    const approachPrompt = `${GROUNDING_PREAMBLE}
+
+Create a step-by-step approach plan (stappenplan) for completing this lab assignment.
 
 Include for each step:
-- What to do
-- What to check/verify
-- Common pitfalls to avoid
+- What to do (from document requirements)
+- What to check/verify (from document criteria)
+- Common pitfalls to avoid (based on document complexity)
 - Suggested order of work
 
-IMPORTANT RULES:
-- Base ALL steps on the actual lab requirements
+STRICT RULES:
+- Base ALL steps on the actual lab requirements in the document
 - If requirements are unclear, note "Clarify with lecturer"
-- Never invent requirements not in the document
+- Never invent requirements not explicitly stated
+- Reference specific document sections where possible
 
 Document content:
 ${documentContent.substring(0, 20000)}
@@ -217,10 +247,11 @@ Return JSON in this format:
   "steps": [
     {
       "number": 1,
-      "title": "Step title",
-      "description": "What to do",
-      "checks": ["What to verify"],
-      "pitfalls": ["Common mistakes to avoid"]
+      "title": "Step title (from document task)",
+      "description": "What to do (document-based)",
+      "checks": ["What to verify (from document criteria)"],
+      "pitfalls": ["Common mistakes based on document complexity"],
+      "source": "Reference to document section (if available)"
     }
   ]
 }`;
@@ -234,7 +265,7 @@ Return JSON in this format:
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [{ role: "user", content: approachPrompt }],
-        temperature: 0.3,
+        temperature: 0.2,
       }),
     });
 
@@ -252,12 +283,18 @@ Return JSON in this format:
       }
     }
 
-    // Generate checklist
-    const checklistPrompt = `Extract a deliverables checklist from this lab assignment.
+    // Generate checklist with strict grounding
+    const checklistPrompt = `${GROUNDING_PREAMBLE}
+
+Extract a deliverables checklist from this lab assignment.
 
 List all items that must be submitted or completed.
 
-IMPORTANT: Only include items explicitly mentioned in the document.
+STRICT RULES:
+- Only include items EXPLICITLY mentioned in the document
+- If an item is implied but not stated, add "needs_clarification": true
+- Use exact document wording for item text
+- Reference the section where each item is mentioned
 
 Document content:
 ${documentContent.substring(0, 15000)}
@@ -265,7 +302,12 @@ ${documentContent.substring(0, 15000)}
 Return JSON in this format:
 {
   "items": [
-    { "text": "Deliverable item", "required": true }
+    { 
+      "text": "Deliverable item (exact document wording)", 
+      "required": true,
+      "needs_clarification": false,
+      "source": "Document section reference"
+    }
   ]
 }`;
 
@@ -278,7 +320,7 @@ Return JSON in this format:
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [{ role: "user", content: checklistPrompt }],
-        temperature: 0.2,
+        temperature: 0.1, // Very low for factual extraction
       }),
     });
 
