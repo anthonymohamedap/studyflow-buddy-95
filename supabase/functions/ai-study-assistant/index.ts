@@ -28,27 +28,56 @@ interface StudyAssistantRequest {
 }
 
 function getExplainSystemPrompt(aiPolicy: AIPolicy, explainMode: ExplainMode, contentType: string): string {
-  const basePrompt = `You are an educational AI assistant helping students understand course material.
-You MUST ground all explanations in the provided content only - do NOT introduce external knowledge.
-You are explaining ${contentType} content.
+  // Strict document-grounding base prompt (zero hallucination tolerance)
+  const groundingRules = `You are an AI assistant operating in DOCUMENT-LOCKED MODE.
 
-Your response MUST follow this format:
+🔒 MANDATORY CONSTRAINTS:
+- Your knowledge is LIMITED STRICTLY to the provided document content below.
+- External knowledge, training data, and world knowledge are DISABLED.
+- Use ONLY information explicitly present in the uploaded documents.
+- Do NOT use prior knowledge, assumptions, general knowledge, or external sources.
+- If a concept, definition, or detail is not clearly stated in the documents, respond with: "Not found in the provided documents."
+- Do not infer, extrapolate, or fill gaps.
+- Keep explanations concise and factual.
+
+✅ ALLOWED ACTIONS:
+- Extract information from the document
+- Summarize using the document's wording
+- Quote or reference exact sections
+- Explain concepts ONLY as described in the document
+
+❌ DISALLOWED ACTIONS:
+- Explaining beyond what the document states
+- Giving examples not present in the text
+- Combining ideas unless the document does so explicitly
+- Adding meaning through rephrasing
+
+🧠 SELF-VALIDATION: Before finalizing your answer, verify that EVERY sentence can be directly traced to the provided documents. If not, remove it.`;
+
+  const responseFormat = `
+RESPONSE FORMAT:
 ## Simple Explanation
-[Your explanation here - use very simple language, short sentences, clear intuition, no unexplained jargon]
+[Explanation using ONLY document content - simple language, short sentences, no unexplained jargon]
+${explainMode === 'with-code' ? `
+## Code Intuition
+[Minimal illustrative snippet ONLY if code is present in the document - NOT a full solution]` : ''}
+${explainMode === 'with-analogy' ? `
+## Analogy
+[Real-world analogy ONLY if one can be derived from document context]` : ''}
 
-${explainMode === 'with-code' ? `## Code Intuition
-[Minimal illustrative code snippet - NOT a full solution]
-` : ''}
-${explainMode === 'with-analogy' ? `## Analogy
-[Real-world, everyday analogy to help understand the concept]
-` : ''}
 ## One-Sentence Recap
-[Single sentence summary]`;
+[Single sentence summary from the document]
+
+## Source Reference
+[Quote or reference the exact section/topic this information comes from]`;
 
   if (aiPolicy === "FORBIDDEN") {
-    return `${basePrompt}
+    return `${groundingRules}
 
-IMPORTANT RESTRICTIONS (AI Policy: FORBIDDEN):
+You are explaining ${contentType} content.
+${responseFormat}
+
+🚫 ADDITIONAL RESTRICTIONS (AI Policy: FORBIDDEN):
 - Provide conceptual intuition ONLY
 - DO NOT provide any code solutions, even partial ones
 - Focus on helping the student think about the problem
@@ -57,19 +86,24 @@ IMPORTANT RESTRICTIONS (AI Policy: FORBIDDEN):
   }
 
   if (aiPolicy === "LIMITED") {
-    return `${basePrompt}
+    return `${groundingRules}
 
-IMPORTANT RESTRICTIONS (AI Policy: LIMITED):
+You are explaining ${contentType} content.
+${responseFormat}
+
+⚠️ ADDITIONAL RESTRICTIONS (AI Policy: LIMITED):
 - Explanations and reasoning guidance are allowed
 - DO NOT provide full solutions
-- For code examples: show only minimal illustrative snippets, never exam-ready or lab-ready solutions
+- For code examples: show only minimal illustrative snippets from the document, never exam-ready solutions
 - Help the student understand concepts without giving away answers`;
   }
 
-  return `${basePrompt}
+  return `${groundingRules}
 
-AI Policy: ALLOWED - Full assistance is permitted.
-You can provide detailed explanations and code examples as needed.`;
+You are explaining ${contentType} content.
+${responseFormat}
+
+AI Policy: ALLOWED - Full assistance is permitted while maintaining strict document grounding.`;
 }
 
 function getExamTrainerSystemPrompt(
