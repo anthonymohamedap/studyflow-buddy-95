@@ -28,7 +28,11 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY")!;
+
+    if (!openaiApiKey) {
+      throw new Error("OPENAI_API_KEY is not configured");
+    }
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -36,10 +40,10 @@ serve(async (req) => {
     const { type, id, bulk } = body;
 
     if (bulk) {
-      return await handleBulkTranslation(supabase, lovableApiKey, body as BulkTranslateRequest);
+      return await handleBulkTranslation(supabase, openaiApiKey, body as BulkTranslateRequest);
     }
 
-    return await handleSingleTranslation(supabase, lovableApiKey, { type, id } as TranslateRequest);
+    return await handleSingleTranslation(supabase, openaiApiKey, { type, id } as TranslateRequest);
   } catch (error) {
     console.error("Translation error:", error);
     return new Response(
@@ -49,15 +53,15 @@ serve(async (req) => {
   }
 });
 
-async function translateText(lovableApiKey: string, text: string, context: string): Promise<string> {
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+async function translateText(openaiApiKey: string, text: string, context: string): Promise<string> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${lovableApiKey}`,
+      Authorization: `Bearer ${openaiApiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
@@ -88,15 +92,15 @@ CRITICAL RULES:
   return data.choices[0]?.message?.content || text;
 }
 
-async function translateJSON(lovableApiKey: string, content: Record<string, unknown>, assetType: string): Promise<Record<string, unknown>> {
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+async function translateJSON(openaiApiKey: string, content: Record<string, unknown>, assetType: string): Promise<Record<string, unknown>> {
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${lovableApiKey}`,
+      Authorization: `Bearer ${openaiApiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "google/gemini-3-flash-preview",
+      model: "gpt-4o",
       messages: [
         {
           role: "system",
@@ -142,7 +146,7 @@ CRITICAL RULES:
 
 async function handleSingleTranslation(
   supabase: SupabaseClient,
-  lovableApiKey: string,
+  openaiApiKey: string,
   request: TranslateRequest
 ): Promise<Response> {
   const { type, id } = request;
@@ -167,9 +171,9 @@ async function handleSingleTranslation(
       .eq("id", id);
 
     try {
-      const titleNl = await translateText(lovableApiKey, chapter.title, "chapter title");
+      const titleNl = await translateText(openaiApiKey, chapter.title, "chapter title");
       const contentNl = chapter.content 
-        ? await translateText(lovableApiKey, chapter.content, "chapter content")
+        ? await translateText(openaiApiKey, chapter.content, "chapter content")
         : null;
 
       await supabase
@@ -214,9 +218,9 @@ async function handleSingleTranslation(
       .eq("id", id);
 
     try {
-      const titleNl = await translateText(lovableApiKey, topic.title, "topic title");
+      const titleNl = await translateText(openaiApiKey, topic.title, "topic title");
       const contentNl = topic.content 
-        ? await translateText(lovableApiKey, topic.content, "topic content")
+        ? await translateText(openaiApiKey, topic.content, "topic content")
         : null;
 
       await supabase
@@ -262,7 +266,7 @@ async function handleSingleTranslation(
 
     try {
       const contentNl = await translateJSON(
-        lovableApiKey, 
+        openaiApiKey, 
         asset.content as Record<string, unknown>, 
         asset.asset_type
       );
@@ -308,9 +312,9 @@ async function handleSingleTranslation(
       .eq("id", id);
 
     try {
-      const titleNl = await translateText(lovableApiKey, lab.title, "lab title");
+      const titleNl = await translateText(openaiApiKey, lab.title, "lab title");
       const descriptionNl = lab.description 
-        ? await translateText(lovableApiKey, lab.description, "lab description")
+        ? await translateText(openaiApiKey, lab.description, "lab description")
         : null;
 
       await supabase
@@ -356,7 +360,7 @@ async function handleSingleTranslation(
 
     try {
       const contentNl = await translateJSON(
-        lovableApiKey, 
+        openaiApiKey, 
         asset.content as Record<string, unknown>, 
         asset.asset_type
       );
@@ -390,7 +394,7 @@ async function handleSingleTranslation(
 
 async function handleBulkTranslation(
   supabase: SupabaseClient,
-  lovableApiKey: string,
+  openaiApiKey: string,
   request: BulkTranslateRequest
 ): Promise<Response> {
   const { type, id } = request;
@@ -431,7 +435,7 @@ async function handleBulkTranslation(
         .eq("translation_status", "pending");
 
       for (const chapter of chapters || []) {
-        await handleSingleTranslation(supabase, lovableApiKey, { type: "chapter", id: chapter.id });
+        await handleSingleTranslation(supabase, openaiApiKey, { type: "chapter", id: chapter.id });
         translatedCount++;
 
         const { data: docTopics } = await supabase
@@ -441,7 +445,7 @@ async function handleBulkTranslation(
           .eq("translation_status", "pending");
 
         for (const docTopic of docTopics || []) {
-          await handleSingleTranslation(supabase, lovableApiKey, { type: "topic", id: docTopic.id });
+          await handleSingleTranslation(supabase, openaiApiKey, { type: "topic", id: docTopic.id });
           translatedCount++;
 
           const { data: assets } = await supabase
@@ -451,7 +455,7 @@ async function handleBulkTranslation(
             .eq("translation_status", "pending");
 
           for (const asset of assets || []) {
-            await handleSingleTranslation(supabase, lovableApiKey, { type: "revision_asset", id: asset.id });
+            await handleSingleTranslation(supabase, openaiApiKey, { type: "revision_asset", id: asset.id });
             translatedCount++;
           }
         }
@@ -466,7 +470,7 @@ async function handleBulkTranslation(
       .eq("translation_status", "pending");
 
     for (const lab of labs || []) {
-      await handleSingleTranslation(supabase, lovableApiKey, { type: "lab", id: lab.id });
+      await handleSingleTranslation(supabase, openaiApiKey, { type: "lab", id: lab.id });
       translatedCount++;
 
       const { data: labAssets } = await supabase
@@ -476,7 +480,7 @@ async function handleBulkTranslation(
         .eq("translation_status", "pending");
 
       for (const asset of labAssets || []) {
-        await handleSingleTranslation(supabase, lovableApiKey, { type: "lab_asset", id: asset.id });
+        await handleSingleTranslation(supabase, openaiApiKey, { type: "lab_asset", id: asset.id });
         translatedCount++;
       }
     }
