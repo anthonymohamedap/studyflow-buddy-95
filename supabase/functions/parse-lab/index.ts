@@ -122,7 +122,7 @@ ${documentContent.substring(0, 30000)}`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "openai/gpt-5",
         messages: [{ role: "user", content: structurePrompt }],
         temperature: 0.2, // Lower temperature for more factual extraction
       }),
@@ -201,7 +201,7 @@ ${documentContent.substring(0, 20000)}`;
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "openai/gpt-5",
         messages: [{ role: "user", content: overviewPrompt }],
         temperature: 0.1,
       }),
@@ -292,7 +292,7 @@ Return JSON in this format:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "openai/gpt-5",
         messages: [{ role: "user", content: approachPrompt }],
         temperature: 0.15,
       }),
@@ -384,7 +384,7 @@ Return JSON:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "openai/gpt-5",
         messages: [{ role: "user", content: howToPrompt }],
         temperature: 0.15,
       }),
@@ -448,7 +448,7 @@ Return JSON:
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+        model: "openai/gpt-5",
         messages: [{ role: "user", content: checklistPrompt }],
         temperature: 0.1,
       }),
