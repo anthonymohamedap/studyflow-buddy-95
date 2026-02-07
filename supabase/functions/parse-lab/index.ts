@@ -173,29 +173,28 @@ ${documentContent.substring(0, 30000)}`;
       }
     }
 
-    // Generate summary (strict grounding)
-    const summaryPrompt = `${GROUNDING_PREAMBLE}
+    // Generate overview (strict grounding)
+    const overviewPrompt = `${GROUNDING_PREAMBLE}
 
-Based on this lab assignment, create a brief summary with 3-6 bullet points that describe:
-- What this lab is about
-- What the end result should be
-- Key skills or concepts being practiced
+You are an academic lab assistant. Create a brief LAB OVERVIEW from this assignment.
 
-STRICT RULES:
-- Only include information from the document
-- If something is unclear, say "Not specified in material"
-- Use document wording, not paraphrasing
-
-Document content:
-${documentContent.substring(0, 20000)}
-
-Return JSON in this format:
+OUTPUT FORMAT:
 {
   "title": "Lab title/name (from document)",
-  "bullets": ["Bullet 1 (document-based)", "Bullet 2", "Bullet 3"]
-}`;
+  "about": "1-2 sentences: What this lab is about",
+  "end_goal": "What must work or be submitted to pass",
+  "key_concepts": ["Concept 1", "Concept 2"] // Only concepts EXPLICITLY mentioned
+}
 
-    const summaryResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+STRICT RULES:
+- Only include information EXPLICITLY in the document
+- If end goal is unclear, state "See deliverables section" or "Not explicitly specified"
+- Do NOT invent requirements or add features not in the document
+
+Document content:
+${documentContent.substring(0, 20000)}`;
+
+    const overviewResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${lovableApiKey}`,
@@ -203,57 +202,80 @@ Return JSON in this format:
       },
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
-        messages: [{ role: "user", content: summaryPrompt }],
-        temperature: 0.2,
+        messages: [{ role: "user", content: overviewPrompt }],
+        temperature: 0.1,
       }),
     });
 
-    let summaryContent = { title: "Lab Summary", bullets: [] };
-    if (summaryResponse.ok) {
-      const summaryResult = await summaryResponse.json();
+    let summaryContent: { title: string; bullets: string[]; about?: string; end_goal?: string; key_concepts?: string[] } = { title: "Lab Summary", bullets: [] };
+    if (overviewResponse.ok) {
+      const overviewResult = await overviewResponse.json();
       try {
-        const content = summaryResult.choices[0].message.content;
+        const content = overviewResult.choices[0].message.content;
         const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
                           content.match(/\{[\s\S]*\}/);
         const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-        summaryContent = JSON.parse(jsonStr);
+        const parsed = JSON.parse(jsonStr);
+        // Convert to legacy format for compatibility, but include new fields
+        summaryContent = {
+          title: parsed.title || "Lab Summary",
+          bullets: [
+            parsed.about,
+            `End goal: ${parsed.end_goal}`,
+            ...(parsed.key_concepts || []).map((c: string) => `Key concept: ${c}`)
+          ].filter(Boolean),
+          about: parsed.about,
+          end_goal: parsed.end_goal,
+          key_concepts: parsed.key_concepts,
+        };
       } catch (e) {
-        console.error("Failed to parse summary:", e);
+        console.error("Failed to parse overview:", e);
       }
     }
 
-    // Generate approach plan (stappenplan) with strict grounding
+    // Generate ACTIONABLE step-by-step execution plan (strict grounding)
     const approachPrompt = `${GROUNDING_PREAMBLE}
 
-Create a step-by-step approach plan (stappenplan) for completing this lab assignment.
+You are an academic lab assistant. Convert this lab assignment into a PRACTICAL, ACTIONABLE execution plan.
 
-Include for each step:
-- What to do (from document requirements)
-- What to check/verify (from document criteria)
-- Common pitfalls to avoid (based on document complexity)
-- Suggested order of work
+CRITICAL: Write as if the student is sitting in the lab RIGHT NOW under time pressure.
+
+FORMAT EACH STEP AS IMPERATIVE INSTRUCTIONS:
+- Use commands: "Create...", "Run...", "Write...", "Configure...", "Test..."
+- Be EXPLICIT about: files to create/edit, commands to run, code to write
+- If something is implied in the document, make it explicit
+- Do NOT write summaries - write ACTION ITEMS
 
 STRICT RULES:
-- Base ALL steps on the actual lab requirements in the document
-- If requirements are unclear, note "Clarify with lecturer"
-- Never invent requirements not explicitly stated
-- Reference specific document sections where possible
+- Base ALL steps on actual document requirements
+- Do NOT invent steps that are not logically required
+- Do NOT add features not mentioned in the document
+- If requirements are unclear: state "Not specified - clarify with lecturer"
+- Reference document sections where possible
 
 Document content:
-${documentContent.substring(0, 20000)}
+${documentContent.substring(0, 25000)}
 
 Return JSON in this format:
 {
   "steps": [
     {
       "number": 1,
-      "title": "Step title (from document task)",
-      "description": "What to do (document-based)",
-      "checks": ["What to verify (from document criteria)"],
-      "pitfalls": ["Common mistakes based on document complexity"],
-      "source": "Reference to document section (if available)"
+      "title": "Short action title (e.g., 'Set up project structure')",
+      "actions": [
+        "Create a new folder called X",
+        "Run command: npm init",
+        "Create file: src/main.js with basic structure"
+      ],
+      "commands": ["npm init", "mkdir src"],
+      "files_to_create": ["src/main.js", "package.json"],
+      "verification": "How to verify this step is complete (from document)",
+      "pitfalls": ["Do NOT skip X", "Common mistake: Y"],
+      "source": "Document section reference"
     }
-  ]
+  ],
+  "tools_required": ["List of tools/software mentioned in document"],
+  "time_estimate": "Estimated time if mentioned, or 'Not specified'"
 }`;
 
     const approachResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -265,11 +287,11 @@ Return JSON in this format:
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [{ role: "user", content: approachPrompt }],
-        temperature: 0.2,
+        temperature: 0.15,
       }),
     });
 
-    let approachContent = { steps: [] };
+    let approachContent: { steps: unknown[]; tools_required?: string[]; time_estimate?: string } = { steps: [] };
     if (approachResponse.ok) {
       const approachResult = await approachResponse.json();
       try {
@@ -283,32 +305,102 @@ Return JSON in this format:
       }
     }
 
-    // Generate checklist with strict grounding
-    const checklistPrompt = `${GROUNDING_PREAMBLE}
+    // Generate practical "How-To" guidance for specific tools/techniques
+    const howToPrompt = `${GROUNDING_PREAMBLE}
 
-Extract a deliverables checklist from this lab assignment.
+You are an academic lab assistant. Based on this lab document, provide PRACTICAL HOW-TO GUIDANCE for any tools, frameworks, or techniques mentioned.
 
-List all items that must be submitted or completed.
-
-STRICT RULES:
-- Only include items EXPLICITLY mentioned in the document
-- If an item is implied but not stated, add "needs_clarification": true
-- Use exact document wording for item text
-- Reference the section where each item is mentioned
+RULES:
+- Only cover tools/techniques EXPLICITLY mentioned in the document
+- Explain HOW to do it, not WHAT it is (assume student knows theory)
+- Write for someone doing this LIVE in a lab session
+- You may reference official documentation for standard tool usage
+- Do NOT invent tools or frameworks not mentioned
 
 Document content:
-${documentContent.substring(0, 15000)}
+${documentContent.substring(0, 20000)}
 
-Return JSON in this format:
+Return JSON:
 {
-  "items": [
-    { 
-      "text": "Deliverable item (exact document wording)", 
-      "required": true,
-      "needs_clarification": false,
-      "source": "Document section reference"
+  "how_to_guides": [
+    {
+      "topic": "Tool or technique name (from document)",
+      "quick_reference": [
+        "Practical instruction 1",
+        "Command or code snippet if relevant",
+        "Where to find more info (official docs)"
+      ],
+      "common_errors": ["Error message: solution"],
+      "source": "Document section mentioning this"
     }
   ]
+}
+
+If no specific tools are mentioned that need guidance, return:
+{ "how_to_guides": [], "note": "No specific tool guidance needed based on document" }`;
+
+    const howToResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-3-flash-preview",
+        messages: [{ role: "user", content: howToPrompt }],
+        temperature: 0.15,
+      }),
+    });
+
+    let howToContent: { how_to_guides: unknown[] } = { how_to_guides: [] };
+    if (howToResponse.ok) {
+      const howToResult = await howToResponse.json();
+      try {
+        const content = howToResult.choices[0].message.content;
+        const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
+                          content.match(/\{[\s\S]*\}/);
+        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
+        howToContent = JSON.parse(jsonStr);
+      } catch (e) {
+        console.error("Failed to parse how-to:", e);
+      }
+    }
+
+    // Generate SUCCESS CHECKLIST with common mistakes (strict grounding)
+    const checklistPrompt = `${GROUNDING_PREAMBLE}
+
+You are an academic lab assistant. Create a LAB SUCCESS CHECKLIST from this assignment.
+
+Include:
+1. ✅ MUST EXIST TO PASS - What deliverables are required
+2. ✅ MUST COMPILE/RUN - What must work technically  
+3. ✅ COMMONLY FORGOTTEN - Things students often miss
+4. ⚠️ TYPICAL MISTAKES - Common errors to avoid
+
+STRICT RULES:
+- Only include items from the document OR logical requirements (like "code must compile")
+- Mark items with "needs_clarification": true if implied but not stated
+- Use exact document wording where possible
+- Reference document sections
+
+Document content:
+${documentContent.substring(0, 18000)}
+
+Return JSON:
+{
+  "must_exist": [
+    { "text": "Deliverable (exact wording)", "source": "Section ref", "needs_clarification": false }
+  ],
+  "must_work": [
+    { "text": "What must compile/run/function", "source": "Section ref" }
+  ],
+  "commonly_forgotten": [
+    { "text": "Thing students often miss", "why": "Why it's easy to forget" }
+  ],
+  "typical_mistakes": [
+    { "mistake": "Common error", "consequence": "What goes wrong", "prevention": "How to avoid" }
+  ],
+  "submission_format": "How to submit (if specified, else 'Not specified in document')"
 }`;
 
     const checklistResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -320,11 +412,18 @@ Return JSON in this format:
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [{ role: "user", content: checklistPrompt }],
-        temperature: 0.1, // Very low for factual extraction
+        temperature: 0.1,
       }),
     });
 
-    let checklistContent = { items: [] };
+    let checklistContent: { 
+      items?: unknown[]; 
+      must_exist?: unknown[]; 
+      must_work?: unknown[]; 
+      commonly_forgotten?: unknown[]; 
+      typical_mistakes?: unknown[];
+      submission_format?: string;
+    } = { items: [] };
     if (checklistResponse.ok) {
       const checklistResult = await checklistResponse.json();
       try {
@@ -332,7 +431,16 @@ Return JSON in this format:
         const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
                           content.match(/\{[\s\S]*\}/);
         const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-        checklistContent = JSON.parse(jsonStr);
+        const parsed = JSON.parse(jsonStr);
+        // Include both new format and legacy compatibility
+        checklistContent = {
+          ...parsed,
+          // Legacy format for backward compatibility
+          items: [
+            ...(parsed.must_exist || []),
+            ...(parsed.must_work || []).map((item: { text: string }) => ({ ...item, required: true })),
+          ]
+        };
       } catch (e) {
         console.error("Failed to parse checklist:", e);
       }
@@ -363,6 +471,13 @@ Return JSON in this format:
         generated_at: now,
         is_generating: false,
       },
+      {
+        lab_id: labId,
+        asset_type: "how_to",
+        content: howToContent,
+        generated_at: now,
+        is_generating: false,
+      },
     ], { onConflict: "lab_id,asset_type" });
 
     // Update parsing status
@@ -380,6 +495,7 @@ Return JSON in this format:
         summary: summaryContent,
         approach: approachContent,
         checklist: checklistContent,
+        howTo: howToContent,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
