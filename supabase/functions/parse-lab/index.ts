@@ -315,36 +315,67 @@ Return JSON in this format:
     // Generate practical "How-To" guidance for specific tools/techniques
     const howToPrompt = `${GROUNDING_PREAMBLE}
 
-You are an academic lab assistant. Based on this lab document, provide PRACTICAL HOW-TO GUIDANCE for any tools, frameworks, or techniques mentioned.
+You are an academic lab assistant. Analyze this lab document to extract PRACTICAL HOW-TO WORKFLOWS.
 
-RULES:
-- Only cover tools/techniques EXPLICITLY mentioned in the document
-- Explain HOW to do it, not WHAT it is (assume student knows theory)
-- Write for someone doing this LIVE in a lab session
-- You may reference official documentation for standard tool usage
-- Do NOT invent tools or frameworks not mentioned
+CRITICAL: DO NOT RELY ONLY ON EXPLICIT STEP-BY-STEP SECTIONS.
+
+Instead, scan the ENTIRE document semantically and extract workflows from:
+- Explanations and descriptions of concepts
+- Theory sections that describe processes
+- Examples showing how things work
+- Contextual clues like "First...", "Before...", "This requires...", "To achieve...", "In practice..."
+- Implied actions from lab goals and deliverables
+
+🔍 DETECTION RULES:
+1. If something is described, infer it must be done
+2. If a concept is explained, extract the setup/configuration steps
+3. If a result is shown, infer the process that produces it
+4. Treat inferred steps equally with explicit steps
+
+📋 WHAT COUNTS AS A WORKFLOW/TASK:
+- Any configuration or setup action
+- Any preparation requirement
+- Any tool/software usage pattern
+- Any logical sequence needed to achieve a result
+- Process flows hidden in explanations
+
+📝 OUTPUT FORMAT:
+For each detected workflow/task, provide:
+1. Clear task title (e.g., "Configure Floor Physics", "Set up Sphere Geometry")
+2. Ordered steps with:
+   - Action: What to do (imperative)
+   - Reasoning: Why this step exists (from document context)
+3. If a step is implied/inferred, that's valid - document context justifies it
 
 Document content:
 ${documentContent.substring(0, 20000)}
 
 Return JSON:
 {
-  "how_to_guides": [
+  "workflows": [
     {
-      "topic": "Tool or technique name (from document)",
-      "quick_reference": [
-        "Practical instruction 1",
-        "Command or code snippet if relevant",
-        "Where to find more info (official docs)"
+      "title": "Task or workflow name",
+      "description": "Brief context of when/why this workflow is used",
+      "steps": [
+        {
+          "number": 1,
+          "action": "What to do (imperative verb)",
+          "reasoning": "Why this step is necessary (from document)",
+          "type": "explicit|inferred"
+        },
+        {
+          "number": 2,
+          "action": "Next action",
+          "reasoning": "Context from document",
+          "type": "explicit|inferred"
+        }
       ],
-      "common_errors": ["Error message: solution"],
-      "source": "Document section mentioning this"
+      "tools_involved": ["Tool1", "Tool2"],
+      "source": "Document section(s) that explain this workflow"
     }
-  ]
-}
-
-If no specific tools are mentioned that need guidance, return:
-{ "how_to_guides": [], "note": "No specific tool guidance needed based on document" }`;
+  ],
+  "note": "Summary of extraction approach if needed"
+}`;
 
     const howToResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
