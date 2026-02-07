@@ -33,7 +33,11 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    
+    if (!openaiApiKey) {
+      throw new Error("OPENAI_API_KEY is not configured");
+    }
 
     const { labId, filePath, fileContent } = await req.json();
 
@@ -115,16 +119,16 @@ Return your response as JSON in this exact format:
 Document content:
 ${documentContent.substring(0, 30000)}`;
 
-    const structureResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const structureResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
+        Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5",
+        model: "gpt-4o",
         messages: [{ role: "user", content: structurePrompt }],
-        temperature: 0.2, // Lower temperature for more factual extraction
+        temperature: 0.2,
       }),
     });
 
@@ -194,14 +198,14 @@ STRICT RULES:
 Document content:
 ${documentContent.substring(0, 20000)}`;
 
-    const overviewResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const overviewResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
+        Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5",
+        model: "gpt-4o",
         messages: [{ role: "user", content: overviewPrompt }],
         temperature: 0.1,
       }),
@@ -285,14 +289,14 @@ Return JSON in this format:
   "has_explicit_hands_on": true
 }`;
 
-    const approachResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const approachResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
+        Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5",
+        model: "gpt-4o",
         messages: [{ role: "user", content: approachPrompt }],
         temperature: 0.15,
       }),
@@ -377,14 +381,14 @@ Return JSON:
   "note": "Summary of extraction approach if needed"
 }`;
 
-    const howToResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const howToResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
+        Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5",
+        model: "gpt-4o",
         messages: [{ role: "user", content: howToPrompt }],
         temperature: 0.15,
       }),
@@ -441,14 +445,14 @@ Return JSON:
   "submission_format": "How to submit (if specified, else 'Not specified in document')"
 }`;
 
-    const checklistResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const checklistResponse = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
+        Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5",
+        model: "gpt-4o",
         messages: [{ role: "user", content: checklistPrompt }],
         temperature: 0.1,
       }),
