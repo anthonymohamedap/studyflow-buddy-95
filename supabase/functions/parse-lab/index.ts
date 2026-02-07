@@ -234,24 +234,30 @@ ${documentContent.substring(0, 20000)}`;
     }
 
     // Generate ACTIONABLE step-by-step execution plan (strict grounding)
+    // PRIORITY: Look for explicit "Hands-on" sections in the document
     const approachPrompt = `${GROUNDING_PREAMBLE}
 
 You are an academic lab assistant. Convert this lab assignment into a PRACTICAL, ACTIONABLE execution plan.
 
+CRITICAL PRIORITY - DETECT "HANDS-ON" SECTIONS:
+1. FIRST, scan the document for explicit "Hands-on" markers (e.g., "Hands-on #1:", "Hands-on 1:", "Exercise 1:", "Stap 1:", "Opdracht 1:", "Task 1:")
+2. If found, extract EACH hands-on section as a separate step with its EXACT instructions
+3. If no explicit markers, derive logical steps from the document structure
+
 CRITICAL: Write as if the student is sitting in the lab RIGHT NOW under time pressure.
 
 FORMAT EACH STEP AS IMPERATIVE INSTRUCTIONS:
-- Use commands: "Create...", "Run...", "Write...", "Configure...", "Test..."
-- Be EXPLICIT about: files to create/edit, commands to run, code to write
-- If something is implied in the document, make it explicit
-- Do NOT write summaries - write ACTION ITEMS
+- Use commands: "Create...", "Run...", "Write...", "Configure...", "Test...", "Select...", "Click..."
+- Be EXPLICIT about: UI actions, menu paths, files to create/edit, commands to run
+- Preserve the EXACT sequence from the document
+- Do NOT merge or skip hands-on sections
 
 STRICT RULES:
+- Extract VERBATIM instructions from hands-on sections when present
 - Base ALL steps on actual document requirements
-- Do NOT invent steps that are not logically required
-- Do NOT add features not mentioned in the document
+- Do NOT invent steps that are not in the document
 - If requirements are unclear: state "Not specified - clarify with lecturer"
-- Reference document sections where possible
+- Include the original hands-on number as reference
 
 Document content:
 ${documentContent.substring(0, 25000)}
@@ -261,21 +267,22 @@ Return JSON in this format:
   "steps": [
     {
       "number": 1,
-      "title": "Short action title (e.g., 'Set up project structure')",
+      "title": "Short action title (e.g., 'Hands-on #1: Save simulation as new file')",
       "action_items": [
-        "Create a new folder called X",
-        "Run command: npm init",
-        "Create file: src/main.js with basic structure"
+        "Open File / Save World As... menu",
+        "Save the simulation as obstacles.wbt",
+        "Verify the file is saved correctly"
       ],
-      "commands": ["npm init", "mkdir src"],
-      "files_to_create": ["src/main.js", "package.json"],
-      "verification": "How to verify this step is complete (from document)",
+      "commands": [],
+      "files_to_create": ["obstacles.wbt"],
+      "verification": "How to verify this step is complete",
       "pitfalls": ["Do NOT skip X", "Common mistake: Y"],
-      "source": "Document section reference"
+      "source": "Hands-on #1" 
     }
   ],
   "tools_required": ["List of tools/software mentioned in document"],
-  "time_estimate": "Estimated time if mentioned, or 'Not specified'"
+  "time_estimate": "Estimated time if mentioned, or 'Not specified'",
+  "has_explicit_hands_on": true
 }`;
 
     const approachResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
