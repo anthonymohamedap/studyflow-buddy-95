@@ -789,7 +789,7 @@ function HowToContent({ howTo }: { howTo: ReturnType<typeof useLabAssets>['howTo
       <Card className="bg-muted/50">
         <CardContent className="py-8 text-center text-muted-foreground">
           <Info className="h-8 w-8 mx-auto mb-2" />
-          No how-to guidance generated yet
+          No workflows or how-to guidance generated yet
         </CardContent>
       </Card>
     );
@@ -801,33 +801,170 @@ function HowToContent({ howTo }: { howTo: ReturnType<typeof useLabAssets>['howTo
     if (item && typeof item === 'object') {
       const obj = item as Record<string, unknown>;
       if ('text' in obj && typeof obj.text === 'string') return obj.text;
+      if ('action' in obj && typeof obj.action === 'string') return obj.action;
       return JSON.stringify(item);
     }
     return String(item);
   };
 
   const rawContent = howTo.displayContent as { 
+    // New workflow-based format
+    workflows?: Array<{
+      title: string;
+      description: string;
+      steps: Array<{
+        number: number;
+        action: string;
+        reasoning: string;
+        type: 'explicit' | 'inferred';
+      }>;
+      tools_involved: string[];
+      source: string;
+    }>;
+    // Legacy format
     guides?: Array<{
       tool: string | { text: string };
       instructions: Array<string | { text: string }>;
-    }> 
+    }>;
+    how_to_guides?: Array<{
+      topic: string;
+      quick_reference: string[];
+      common_errors: string[];
+      source: string;
+    }>;
   };
 
-  // Normalize
-  const content = {
-    guides: rawContent.guides?.map(guide => ({
-      tool: getText(guide.tool),
-      instructions: guide.instructions?.map(getText) || [],
-    }))
-  };
+  // Normalize legacy guides format
+  const legacyGuides = rawContent.guides?.map(guide => ({
+    tool: getText(guide.tool),
+    instructions: guide.instructions?.map(getText) || [],
+  }));
 
-  return (
-    <div className="space-y-4">
-      {howTo.needsTranslation && (
-        <Badge variant="outline" className="text-xs">NL not generated yet</Badge>
-      )}
-      {content.guides && content.guides.length > 0 ? (
-        content.guides.map((guide, index) => (
+  // Handle new workflow-based format
+  if (rawContent.workflows && rawContent.workflows.length > 0) {
+    return (
+      <div className="space-y-4">
+        {howTo.needsTranslation && (
+          <Badge variant="outline" className="text-xs">NL not generated yet</Badge>
+        )}
+        {rawContent.workflows.map((workflow, wIdx) => (
+          <Card key={wIdx}>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Route className="h-4 w-4 text-primary" />
+                {getText(workflow.title)}
+              </CardTitle>
+              <CardDescription>{getText(workflow.description)}</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Tools Involved */}
+              {workflow.tools_involved && workflow.tools_involved.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-sm mb-2 flex items-center gap-1">
+                    <Wrench className="h-3 w-3" />
+                    Tools:
+                  </h4>
+                  <div className="flex flex-wrap gap-2">
+                    {workflow.tools_involved.map((tool, tIdx) => (
+                      <Badge key={tIdx} variant="secondary">
+                        {getText(tool)}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Steps */}
+              <div>
+                <h4 className="font-semibold text-sm mb-3">Steps:</h4>
+                <ol className="space-y-4">
+                  {workflow.steps.map((step, sIdx) => (
+                    <li key={sIdx} className="flex gap-3">
+                      <div className="h-6 w-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                        {step.number || sIdx + 1}
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <p className="font-medium text-sm">{getText(step.action)}</p>
+                        <p className="text-muted-foreground text-xs">{getText(step.reasoning)}</p>
+                        {step.type === 'inferred' && (
+                          <Badge variant="outline" className="text-xs">
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            Inferred from context
+                          </Badge>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+
+              {/* Source Reference */}
+              {workflow.source && (
+                <div className="text-xs text-muted-foreground border-t pt-2 mt-2">
+                  <span className="font-medium">Source:</span> {getText(workflow.source)}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  // Fallback to how_to_guides format
+  if (rawContent.how_to_guides && rawContent.how_to_guides.length > 0) {
+    return (
+      <div className="space-y-4">
+        {howTo.needsTranslation && (
+          <Badge variant="outline" className="text-xs">NL not generated yet</Badge>
+        )}
+        {rawContent.how_to_guides.map((guide, index) => (
+          <Card key={index}>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wrench className="h-4 w-4 text-primary" />
+                {getText(guide.topic)}
+              </CardTitle>
+              {guide.source && (
+                <CardDescription>{getText(guide.source)}</CardDescription>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {guide.quick_reference && guide.quick_reference.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Quick Reference:</h4>
+                  <ul className="list-disc list-inside space-y-1">
+                    {guide.quick_reference.map((ref, idx) => (
+                      <li key={idx} className="text-sm">{getText(ref)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {guide.common_errors && guide.common_errors.length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-sm mb-2 text-destructive">Common Errors:</h4>
+                  <ul className="space-y-1">
+                    {guide.common_errors.map((error, idx) => (
+                      <li key={idx} className="text-sm bg-destructive/10 p-2 rounded">{getText(error)}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    );
+  }
+
+  // Fallback to legacy guides format
+  if (legacyGuides && legacyGuides.length > 0) {
+    return (
+      <div className="space-y-4">
+        {howTo.needsTranslation && (
+          <Badge variant="outline" className="text-xs">NL not generated yet</Badge>
+        )}
+        {legacyGuides.map((guide, index) => (
           <Card key={index}>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
@@ -848,15 +985,18 @@ function HowToContent({ howTo }: { howTo: ReturnType<typeof useLabAssets>['howTo
               </ol>
             </CardContent>
           </Card>
-        ))
-      ) : (
-        <Card className="bg-muted/50">
-          <CardContent className="py-8 text-center text-muted-foreground">
-            No tool-specific guidance found in document
-          </CardContent>
-        </Card>
-      )}
-    </div>
+        ))}
+      </div>
+    );
+  }
+
+  return (
+    <Card className="bg-muted/50">
+      <CardContent className="py-8 text-center text-muted-foreground">
+        <Info className="h-8 w-8 mx-auto mb-2" />
+        No workflows or tool-specific guidance found in document
+      </CardContent>
+    </Card>
   );
 }
 
