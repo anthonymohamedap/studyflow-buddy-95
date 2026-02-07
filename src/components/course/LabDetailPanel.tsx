@@ -30,6 +30,10 @@ import {
   CheckCircle2,
   AlertTriangle,
   Info,
+  Wrench,
+  Terminal,
+  FileCode,
+  CircleCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -40,7 +44,7 @@ interface LabDetailPanelProps {
 
 export function LabDetailPanel({ labId, onClose }: LabDetailPanelProps) {
   const { lab, isLoading: labLoading } = useLab(labId);
-  const { summary, approachPlan, checklist, isLoading: assetsLoading, refetch: refetchAssets } = useLabAssets(labId);
+  const { summary, approachPlan, checklist, howTo, isLoading: assetsLoading, refetch: refetchAssets } = useLabAssets(labId);
   const { sections, isLoading: sectionsLoading } = useLabSections(labId);
   const { updateLab, parseLab } = useLabMutations();
   const { language } = useLanguage();
@@ -117,7 +121,7 @@ export function LabDetailPanel({ labId, onClose }: LabDetailPanelProps) {
     );
   }
 
-  const hasGeneratedContent = summary || approachPlan || checklist;
+  const hasGeneratedContent = summary || approachPlan || checklist || howTo;
   const isParsing = lab.parsing_status === 'parsing';
 
   return (
@@ -229,10 +233,16 @@ export function LabDetailPanel({ labId, onClose }: LabDetailPanelProps) {
                   <Route className="h-4 w-4" />
                   Approach Plan
                 </TabsTrigger>
-                <TabsTrigger value="checklist" className="gap-2">
+              <TabsTrigger value="checklist" className="gap-2">
                   <ListChecks className="h-4 w-4" />
                   Checklist
                 </TabsTrigger>
+                {howTo && (
+                  <TabsTrigger value="howto" className="gap-2">
+                    <Wrench className="h-4 w-4" />
+                    How-To
+                  </TabsTrigger>
+                )}
                 {sections.length > 0 && (
                   <TabsTrigger value="sections" className="gap-2">
                     <FileText className="h-4 w-4" />
@@ -266,6 +276,12 @@ export function LabDetailPanel({ labId, onClose }: LabDetailPanelProps) {
             <TabsContent value="checklist">
               <ChecklistContent checklist={checklist} labId={labId} />
             </TabsContent>
+
+            {howTo && (
+              <TabsContent value="howto">
+                <HowToContent howTo={howTo} />
+              </TabsContent>
+            )}
 
             {sections.length > 0 && (
               <TabsContent value="sections">
@@ -307,7 +323,14 @@ function SummaryContent({ summary }: { summary: ReturnType<typeof useLabAssets>[
     );
   }
 
-  const content = summary.displayContent as { title?: string; bullets?: string[] };
+  // Support both old format (title/bullets) and new format (about/end_goal/key_concepts)
+  const content = summary.displayContent as { 
+    title?: string; 
+    bullets?: string[];
+    about?: string;
+    end_goal?: string;
+    key_concepts?: string[];
+  };
 
   return (
     <Card>
@@ -315,15 +338,42 @@ function SummaryContent({ summary }: { summary: ReturnType<typeof useLabAssets>[
         <div className="flex items-center justify-between">
           <CardTitle className="text-base flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-primary" />
-            {content.title || 'Lab Summary'}
+            {content.title || 'Lab Overview'}
           </CardTitle>
           {summary.needsTranslation && (
             <Badge variant="outline" className="text-xs">NL not generated yet</Badge>
           )}
         </div>
       </CardHeader>
-      <CardContent>
-        {content.bullets && content.bullets.length > 0 ? (
+      <CardContent className="space-y-4">
+        {/* New format: about and end_goal */}
+        {content.about && (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-1">About</p>
+            <p className="text-sm">{content.about}</p>
+          </div>
+        )}
+        
+        {content.end_goal && (
+          <div className="bg-primary/5 rounded-lg p-3 border border-primary/20">
+            <p className="text-xs font-medium text-primary mb-1">🎯 End Goal</p>
+            <p className="text-sm font-medium">{content.end_goal}</p>
+          </div>
+        )}
+
+        {content.key_concepts && content.key_concepts.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Key Concepts</p>
+            <div className="flex flex-wrap gap-2">
+              {content.key_concepts.map((concept, index) => (
+                <Badge key={index} variant="secondary">{concept}</Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Legacy format: bullets */}
+        {content.bullets && content.bullets.length > 0 && !content.about && (
           <ul className="space-y-2">
             {content.bullets.map((bullet, index) => (
               <li key={index} className="flex gap-2">
@@ -334,7 +384,9 @@ function SummaryContent({ summary }: { summary: ReturnType<typeof useLabAssets>[
               </li>
             ))}
           </ul>
-        ) : (
+        )}
+        
+        {!content.bullets?.length && !content.about && (
           <p className="text-sm text-muted-foreground">No summary points available</p>
         )}
       </CardContent>
@@ -354,13 +406,18 @@ function ApproachPlanContent({ approachPlan }: { approachPlan: ReturnType<typeof
     );
   }
 
+  // Support both old and new format
   const content = approachPlan.displayContent as { 
     steps?: Array<{
       number: number;
       title: string;
-      description: string;
+      description?: string;
       checks?: string[];
       pitfalls?: string[];
+      action_items?: string[];
+      commands?: string[];
+      files_to_create?: string[];
+      verification?: string;
     }> 
   };
 
@@ -381,8 +438,69 @@ function ApproachPlanContent({ approachPlan }: { approachPlan: ReturnType<typeof
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-sm">{step.description}</p>
+              {step.description && (
+                <p className="text-sm">{step.description}</p>
+              )}
               
+              {/* New format: action items */}
+              {step.action_items && step.action_items.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">📋 Action Items:</p>
+                  <ul className="text-sm space-y-1">
+                    {step.action_items.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <CircleCheck className="h-3 w-3 text-primary mt-1 shrink-0" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* New format: commands */}
+              {step.commands && step.commands.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                    <Terminal className="h-3 w-3 inline mr-1" />
+                    Commands:
+                  </p>
+                  <div className="space-y-1">
+                    {step.commands.map((cmd, i) => (
+                      <code key={i} className="block text-xs bg-muted px-2 py-1 rounded font-mono">
+                        {cmd}
+                      </code>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* New format: files to create */}
+              {step.files_to_create && step.files_to_create.length > 0 && (
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-1">
+                    <FileCode className="h-3 w-3 inline mr-1" />
+                    Files to Create:
+                  </p>
+                  <ul className="text-sm space-y-1">
+                    {step.files_to_create.map((file, i) => (
+                      <li key={i} className="flex items-center gap-2">
+                        <FileText className="h-3 w-3 text-muted-foreground" />
+                        <code className="text-xs">{file}</code>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* New format: verification */}
+              {step.verification && (
+                <div className="bg-success/10 rounded p-2 border border-success/20">
+                  <p className="text-xs font-medium text-success mb-0.5">✓ Verification:</p>
+                  <p className="text-xs">{step.verification}</p>
+                </div>
+              )}
+              
+              {/* Legacy format: checks */}
               {step.checks && step.checks.length > 0 && (
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-1">✓ Checks:</p>
@@ -441,8 +559,13 @@ function ChecklistContent({ checklist, labId }: {
     );
   }
 
+  // Support both old format (items) and new format (must_exist, must_work, etc.)
   const content = checklist.displayContent as { 
-    items?: Array<{ text: string; required?: boolean }> 
+    items?: Array<{ text: string; required?: boolean }>;
+    must_exist?: string[];
+    must_work?: string[];
+    commonly_forgotten?: string[];
+    typical_mistakes?: string[];
   };
 
   const toggleItem = (index: number) => {
@@ -457,47 +580,182 @@ function ChecklistContent({ checklist, labId }: {
     });
   };
 
+  // Combine legacy items with new must_exist for counting
+  const allItems = content.items || (content.must_exist?.map(text => ({ text, required: true })) ?? []);
   const completedCount = checkedItems.size;
-  const totalCount = content.items?.length || 0;
+  const totalCount = allItems.length;
 
   return (
-    <Card>
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Deliverables Checklist</CardTitle>
-          <Badge variant={completedCount === totalCount ? 'default' : 'secondary'}>
-            {completedCount}/{totalCount}
-          </Badge>
-        </div>
-        {checklist.needsTranslation && (
-          <Badge variant="outline" className="text-xs w-fit">NL not generated yet</Badge>
-        )}
-      </CardHeader>
-      <CardContent>
-        {content.items && content.items.length > 0 ? (
-          <ul className="space-y-3">
-            {content.items.map((item, index) => (
-              <li key={index} className="flex items-start gap-3">
-                <Checkbox
-                  checked={checkedItems.has(index)}
-                  onCheckedChange={() => toggleItem(index)}
-                />
-                <div className="flex-1">
+    <div className="space-y-4">
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">✅ Must Exist / Deliverables</CardTitle>
+            <Badge variant={completedCount === totalCount ? 'default' : 'secondary'}>
+              {completedCount}/{totalCount}
+            </Badge>
+          </div>
+          {checklist.needsTranslation && (
+            <Badge variant="outline" className="text-xs w-fit">NL not generated yet</Badge>
+          )}
+        </CardHeader>
+        <CardContent>
+          {/* New format: must_exist */}
+          {content.must_exist && content.must_exist.length > 0 ? (
+            <ul className="space-y-3">
+              {content.must_exist.map((item, index) => (
+                <li key={index} className="flex items-start gap-3">
+                  <Checkbox
+                    checked={checkedItems.has(index)}
+                    onCheckedChange={() => toggleItem(index)}
+                  />
                   <span className={checkedItems.has(index) ? 'line-through text-muted-foreground' : ''}>
-                    {item.text}
+                    {item}
                   </span>
-                  {item.required && (
-                    <Badge variant="destructive" className="ml-2 text-xs">Required</Badge>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-sm text-muted-foreground">No deliverables found in document</p>
-        )}
-      </CardContent>
-    </Card>
+                </li>
+              ))}
+            </ul>
+          ) : content.items && content.items.length > 0 ? (
+            /* Legacy format: items */
+            <ul className="space-y-3">
+              {content.items.map((item, index) => (
+                <li key={index} className="flex items-start gap-3">
+                  <Checkbox
+                    checked={checkedItems.has(index)}
+                    onCheckedChange={() => toggleItem(index)}
+                  />
+                  <div className="flex-1">
+                    <span className={checkedItems.has(index) ? 'line-through text-muted-foreground' : ''}>
+                      {item.text}
+                    </span>
+                    {item.required && (
+                      <Badge variant="destructive" className="ml-2 text-xs">Required</Badge>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">No deliverables found in document</p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* New format: must_work */}
+      {content.must_work && content.must_work.length > 0 && (
+        <Card className="border-success/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-success">🔧 Must Work / Compile</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {content.must_work.map((item, index) => (
+                <li key={index} className="flex items-start gap-2 text-sm">
+                  <CheckCircle2 className="h-4 w-4 text-success mt-0.5 shrink-0" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* New format: commonly_forgotten */}
+      {content.commonly_forgotten && content.commonly_forgotten.length > 0 && (
+        <Card className="border-warning/30 bg-warning/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-warning">⚠️ Commonly Forgotten</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {content.commonly_forgotten.map((item, index) => (
+                <li key={index} className="flex items-start gap-2 text-sm">
+                  <AlertTriangle className="h-4 w-4 text-warning mt-0.5 shrink-0" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* New format: typical_mistakes */}
+      {content.typical_mistakes && content.typical_mistakes.length > 0 && (
+        <Card className="border-destructive/30 bg-destructive/5">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-destructive">🚫 Typical Mistakes to Avoid</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ul className="space-y-2">
+              {content.typical_mistakes.map((item, index) => (
+                <li key={index} className="flex items-start gap-2 text-sm">
+                  <AlertTriangle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                  {item}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function HowToContent({ howTo }: { howTo: ReturnType<typeof useLabAssets>['howTo'] }) {
+  if (!howTo) {
+    return (
+      <Card className="bg-muted/50">
+        <CardContent className="py-8 text-center text-muted-foreground">
+          <Info className="h-8 w-8 mx-auto mb-2" />
+          No how-to guidance generated yet
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const content = howTo.displayContent as { 
+    guides?: Array<{
+      tool: string;
+      instructions: string[];
+    }> 
+  };
+
+  return (
+    <div className="space-y-4">
+      {howTo.needsTranslation && (
+        <Badge variant="outline" className="text-xs">NL not generated yet</Badge>
+      )}
+      {content.guides && content.guides.length > 0 ? (
+        content.guides.map((guide, index) => (
+          <Card key={index}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Wrench className="h-4 w-4 text-primary" />
+                {guide.tool}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ol className="space-y-2">
+                {guide.instructions.map((instruction, i) => (
+                  <li key={i} className="flex gap-2 text-sm">
+                    <Badge variant="secondary" className="shrink-0 h-5 w-5 p-0 flex items-center justify-center text-xs">
+                      {i + 1}
+                    </Badge>
+                    <span>{instruction}</span>
+                  </li>
+                ))}
+              </ol>
+            </CardContent>
+          </Card>
+        ))
+      ) : (
+        <Card className="bg-muted/50">
+          <CardContent className="py-8 text-center text-muted-foreground">
+            No tool-specific guidance found in document
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 
