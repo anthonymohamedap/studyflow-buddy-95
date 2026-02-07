@@ -27,7 +27,7 @@ export interface LabDocument {
 export interface LabAsset {
   id: string;
   lab_id: string;
-  asset_type: 'summary' | 'approach_plan' | 'checklist' | 'key_terms';
+  asset_type: 'summary' | 'approach_plan' | 'checklist' | 'key_terms' | 'how_to';
   content: Record<string, unknown>;
   content_nl: Record<string, unknown> | null;
   translation_status: string | null;
@@ -141,6 +141,7 @@ export function useLabAssets(labId: string | undefined) {
     summary: getAsset('summary'),
     approachPlan: getAsset('approach_plan'),
     checklist: getAsset('checklist'),
+    howTo: getAsset('how_to'),
   };
 }
 
