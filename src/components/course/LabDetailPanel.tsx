@@ -323,13 +323,33 @@ function SummaryContent({ summary }: { summary: ReturnType<typeof useLabAssets>[
     );
   }
 
+  // Helper to safely extract text from potentially complex objects
+  const getText = (item: unknown): string => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object') {
+      const obj = item as Record<string, unknown>;
+      if ('text' in obj && typeof obj.text === 'string') return obj.text;
+      return JSON.stringify(item);
+    }
+    return String(item);
+  };
+
   // Support both old format (title/bullets) and new format (about/end_goal/key_concepts)
-  const content = summary.displayContent as { 
-    title?: string; 
-    bullets?: string[];
-    about?: string;
-    end_goal?: string;
-    key_concepts?: string[];
+  const rawContent = summary.displayContent as { 
+    title?: string | { text: string }; 
+    bullets?: Array<string | { text: string }>;
+    about?: string | { text: string };
+    end_goal?: string | { text: string };
+    key_concepts?: Array<string | { text: string }>;
+  };
+
+  // Normalize
+  const content = {
+    title: rawContent.title ? getText(rawContent.title) : undefined,
+    bullets: rawContent.bullets?.map(getText),
+    about: rawContent.about ? getText(rawContent.about) : undefined,
+    end_goal: rawContent.end_goal ? getText(rawContent.end_goal) : undefined,
+    key_concepts: rawContent.key_concepts?.map(getText),
   };
 
   return (
@@ -406,27 +426,45 @@ function ApproachPlanContent({ approachPlan }: { approachPlan: ReturnType<typeof
     );
   }
 
+  // Helper to safely extract text from potentially complex objects
+  const getText = (item: unknown): string => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object') {
+      const obj = item as Record<string, unknown>;
+      if ('text' in obj && typeof obj.text === 'string') return obj.text;
+      return JSON.stringify(item);
+    }
+    return String(item);
+  };
+
   // Support both old and new format (including 'actions' alias for 'action_items')
   const rawContent = approachPlan.displayContent as { 
     steps?: Array<{
       number: number;
-      title: string;
-      description?: string;
-      checks?: string[];
-      pitfalls?: string[];
-      action_items?: string[];
-      actions?: string[]; // Alias for action_items
-      commands?: string[];
-      files_to_create?: string[];
-      verification?: string;
+      title: string | { text: string };
+      description?: string | { text: string };
+      checks?: Array<string | { text: string }>;
+      pitfalls?: Array<string | { text: string }>;
+      action_items?: Array<string | { text: string }>;
+      actions?: Array<string | { text: string }>; // Alias for action_items
+      commands?: Array<string | { text: string }>;
+      files_to_create?: Array<string | { text: string }>;
+      verification?: string | { text: string };
     }> 
   };
 
-  // Normalize: use action_items, but fallback to actions if present
+  // Normalize: use action_items, but fallback to actions if present, and ensure all are strings
   const content = {
     steps: rawContent.steps?.map(step => ({
-      ...step,
-      action_items: step.action_items || step.actions || [],
+      number: step.number,
+      title: getText(step.title),
+      description: step.description ? getText(step.description) : undefined,
+      checks: step.checks?.map(getText),
+      pitfalls: step.pitfalls?.map(getText),
+      action_items: (step.action_items || step.actions || []).map(getText),
+      commands: step.commands?.map(getText),
+      files_to_create: step.files_to_create?.map(getText),
+      verification: step.verification ? getText(step.verification) : undefined,
     }))
   };
 
@@ -568,13 +606,48 @@ function ChecklistContent({ checklist, labId }: {
     );
   }
 
+  // Helper to safely extract text from potentially complex objects
+  const getText = (item: unknown): string => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object') {
+      const obj = item as Record<string, unknown>;
+      // Handle objects with text property
+      if ('text' in obj && typeof obj.text === 'string') return obj.text;
+      // Handle mistake objects
+      if ('mistake' in obj && typeof obj.mistake === 'string') return obj.mistake;
+      // Fallback: stringify
+      return JSON.stringify(item);
+    }
+    return String(item);
+  };
+
   // Support both old format (items) and new format (must_exist, must_work, etc.)
-  const content = checklist.displayContent as { 
-    items?: Array<{ text: string; required?: boolean }>;
-    must_exist?: string[];
-    must_work?: string[];
-    commonly_forgotten?: string[];
-    typical_mistakes?: string[];
+  const rawContent = checklist.displayContent as { 
+    items?: Array<{ text: string; required?: boolean } | string>;
+    must_exist?: Array<string | { text: string }>;
+    must_work?: Array<string | { text: string }>;
+    commonly_forgotten?: Array<string | { text: string }>;
+    typical_mistakes?: Array<string | { mistake: string; prevention?: string; consequence?: string }>;
+  };
+
+  // Normalize all arrays to string arrays
+  const content = {
+    items: rawContent.items?.map(item => 
+      typeof item === 'string' ? { text: item, required: false } : { text: getText(item), required: (item as { required?: boolean }).required }
+    ),
+    must_exist: rawContent.must_exist?.map(getText),
+    must_work: rawContent.must_work?.map(getText),
+    commonly_forgotten: rawContent.commonly_forgotten?.map(getText),
+    typical_mistakes: rawContent.typical_mistakes?.map(item => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && 'mistake' in item) {
+        const m = item as { mistake: string; prevention?: string; consequence?: string };
+        let text = m.mistake;
+        if (m.prevention) text += ` → ${m.prevention}`;
+        return text;
+      }
+      return getText(item);
+    }),
   };
 
   const toggleItem = (index: number) => {
@@ -722,11 +795,30 @@ function HowToContent({ howTo }: { howTo: ReturnType<typeof useLabAssets>['howTo
     );
   }
 
-  const content = howTo.displayContent as { 
+  // Helper to safely extract text from potentially complex objects
+  const getText = (item: unknown): string => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object') {
+      const obj = item as Record<string, unknown>;
+      if ('text' in obj && typeof obj.text === 'string') return obj.text;
+      return JSON.stringify(item);
+    }
+    return String(item);
+  };
+
+  const rawContent = howTo.displayContent as { 
     guides?: Array<{
-      tool: string;
-      instructions: string[];
+      tool: string | { text: string };
+      instructions: Array<string | { text: string }>;
     }> 
+  };
+
+  // Normalize
+  const content = {
+    guides: rawContent.guides?.map(guide => ({
+      tool: getText(guide.tool),
+      instructions: guide.instructions?.map(getText) || [],
+    }))
   };
 
   return (
