@@ -262,7 +262,7 @@ Return JSON in this format:
     {
       "number": 1,
       "title": "Short action title (e.g., 'Set up project structure')",
-      "actions": [
+      "action_items": [
         "Create a new folder called X",
         "Run command: npm init",
         "Create file: src/main.js with basic structure"

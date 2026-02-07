@@ -406,8 +406,8 @@ function ApproachPlanContent({ approachPlan }: { approachPlan: ReturnType<typeof
     );
   }
 
-  // Support both old and new format
-  const content = approachPlan.displayContent as { 
+  // Support both old and new format (including 'actions' alias for 'action_items')
+  const rawContent = approachPlan.displayContent as { 
     steps?: Array<{
       number: number;
       title: string;
@@ -415,10 +415,19 @@ function ApproachPlanContent({ approachPlan }: { approachPlan: ReturnType<typeof
       checks?: string[];
       pitfalls?: string[];
       action_items?: string[];
+      actions?: string[]; // Alias for action_items
       commands?: string[];
       files_to_create?: string[];
       verification?: string;
     }> 
+  };
+
+  // Normalize: use action_items, but fallback to actions if present
+  const content = {
+    steps: rawContent.steps?.map(step => ({
+      ...step,
+      action_items: step.action_items || step.actions || [],
+    }))
   };
 
   return (
