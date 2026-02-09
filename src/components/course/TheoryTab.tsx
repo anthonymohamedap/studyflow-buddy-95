@@ -69,9 +69,10 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
     }
   };
 
-  const uploadFile = async (file: File): Promise<string | null> => {
+  const uploadFile = async (file: File): Promise<{ publicUrl: string; filePath: string } | null> => {
     const fileExt = file.name.split('.').pop();
-    const fileName = `${courseId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
+    const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const fileName = `${courseId}/${Date.now()}-${sanitizedName}`;
     
     const { error } = await supabase.storage
       .from('course-materials')
@@ -86,7 +87,7 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
       .from('course-materials')
       .getPublicUrl(fileName);
     
-    return urlData.publicUrl;
+    return { publicUrl: urlData.publicUrl, filePath: fileName };
   };
 
   const handleAddTopic = async (e: React.FormEvent) => {
@@ -95,12 +96,14 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
     
     try {
       let fileUrl = newTopic.source_url;
+      let filePath: string | undefined;
       
       // Upload file if selected
       if (selectedFile) {
-        const uploadedUrl = await uploadFile(selectedFile);
-        if (uploadedUrl) {
-          fileUrl = uploadedUrl;
+        const result = await uploadFile(selectedFile);
+        if (result) {
+          fileUrl = result.publicUrl;
+          filePath = result.filePath;
         }
       }
       
@@ -108,6 +111,7 @@ export function TheoryTab({ courseId }: TheoryTabProps) {
         course_id: courseId,
         ...newTopic,
         source_url: fileUrl,
+        file_path: filePath,
       });
       
       setShowAddDialog(false);

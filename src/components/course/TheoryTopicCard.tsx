@@ -128,22 +128,38 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: T
 
   // Load document content when outline is shown for parsing
   useEffect(() => {
-    if (showOutline && canParse && !documentContent && !isParsed && topic.source_url) {
+    if (showOutline && canParse && !documentContent && !isParsed && (topic.source_url || topic.file_path)) {
       setLoadingContent(true);
-      // For PDF files, we'd need to use a parsing service
-      // For now, we'll fetch the content and use AI to extract text
-      // This is a placeholder - in production, you'd use a PDF parsing library
-      fetch(topic.source_url)
-        .then(async (res) => {
-          if (res.ok) {
-            const text = await res.text();
+      
+      const loadContent = async () => {
+        try {
+          // If we have a file_path, download from storage (works for PDFs)
+          if (topic.file_path) {
+            const { data, error } = await (await import('@/integrations/supabase/client')).supabase.storage
+              .from('course-materials')
+              .download(topic.file_path);
+            
+            if (error) throw error;
+            const text = await data.text();
             setDocumentContent(text);
+          } else if (topic.source_url) {
+            // For URLs, try fetching directly
+            const res = await fetch(topic.source_url);
+            if (res.ok) {
+              const text = await res.text();
+              setDocumentContent(text);
+            }
           }
-        })
-        .catch(console.error)
-        .finally(() => setLoadingContent(false));
+        } catch (err) {
+          console.error('Failed to load document:', err);
+        } finally {
+          setLoadingContent(false);
+        }
+      };
+      
+      loadContent();
     }
-  }, [showOutline, canParse, documentContent, isParsed, topic.source_url]);
+  }, [showOutline, canParse, documentContent, isParsed, topic.source_url, topic.file_path]);
 
   const handleStatusClick = () => {
     const nextStatus = topic.status === 'NOT_VIEWED' 
