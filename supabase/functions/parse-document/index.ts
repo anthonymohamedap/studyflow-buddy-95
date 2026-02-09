@@ -115,6 +115,16 @@ If the document has no clear structure, create logical groupings with descriptiv
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      if (response.status === 402) {
+        await supabase
+          .from("theory_topics")
+          .update({ parsing_status: "failed", parsing_error: "AI credits exhausted. Please add credits in Settings → Workspace → Usage." })
+          .eq("id", theoryTopicId);
+        return new Response(
+          JSON.stringify({ error: "AI credits exhausted. Please add credits in Settings → Workspace → Usage." }),
+          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       const errorText = await response.text();
       throw new Error(`AI gateway error: ${errorText}`);
     }
