@@ -75,7 +75,8 @@ export function LabDetailPanel({ labId, onClose }: LabDetailPanelProps) {
 
     setIsRegenerating(true);
     try {
-      const fileName = `${Date.now()}-${file.name}`;
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `${Date.now()}-${sanitizedName}`;
       const filePath = `labs/${lab?.course_id}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage

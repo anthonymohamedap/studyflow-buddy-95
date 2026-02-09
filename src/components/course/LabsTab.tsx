@@ -97,7 +97,8 @@ export function LabsTab({ courseId }: LabsTabProps) {
     setIsUploading(true);
     try {
       // Upload file to storage
-      const fileName = `${Date.now()}-${file.name}`;
+      const sanitizedName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `${Date.now()}-${sanitizedName}`;
       const filePath = `labs/${courseId}/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
