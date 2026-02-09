@@ -86,7 +86,43 @@ serve(async (req) => {
       throw new Error("No document content available");
     }
 
-    // Parse document structure with AI (strict grounding)
+    // Helper to make AI call and parse JSON response
+    const callAI = async (prompt: string): Promise<unknown> => {
+      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${lovableApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [{ role: "user", content: prompt }],
+          temperature: 0.15,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`AI call failed: ${errorText}`);
+      }
+
+      const result = await response.json();
+      if (!result.choices?.[0]?.message?.content) {
+        throw new Error("Invalid AI response: missing content");
+      }
+
+      const content = result.choices[0].message.content;
+      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || content.match(/\{[\s\S]*\}/);
+      const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
+      return JSON.parse(jsonStr);
+    };
+
+    const docSlice30k = documentContent.substring(0, 30000);
+    const docSlice20k = documentContent.substring(0, 20000);
+    const docSlice25k = documentContent.substring(0, 25000);
+    const docSlice18k = documentContent.substring(0, 18000);
+
+    // Build all prompts
     const structurePrompt = `${GROUNDING_PREAMBLE}
 
 You are analyzing a lab assignment document. Extract the following information:
@@ -117,67 +153,8 @@ Return your response as JSON in this exact format:
 }
 
 Document content:
-${documentContent.substring(0, 30000)}`;
+${docSlice30k}`;
 
-    const structureResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: structurePrompt }],
-        temperature: 0.2,
-      }),
-    });
-
-    if (!structureResponse.ok) {
-      const errorText = await structureResponse.text();
-      throw new Error(`AI structure extraction failed: ${errorText}`);
-    }
-
-    const structureResult = await structureResponse.json();
-    
-    if (!structureResult.choices?.[0]?.message?.content) {
-      throw new Error("Invalid AI response: missing content");
-    }
-
-    let structuredData;
-    try {
-      const content = structureResult.choices[0].message.content;
-      const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
-                        content.match(/\{[\s\S]*\}/);
-      const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-      structuredData = JSON.parse(jsonStr);
-    } catch (parseError) {
-      console.error("Failed to parse structure:", structureResult.choices[0].message.content);
-      throw new Error(`Failed to parse AI response as JSON: ${parseError}`);
-    }
-
-    // Update lab description
-    if (structuredData.description) {
-      await supabase
-        .from("lab_documents")
-        .update({ description: structuredData.description })
-        .eq("id", labId);
-    }
-
-    // Insert extracted sections
-    if (structuredData.sections && Array.isArray(structuredData.sections)) {
-      for (let i = 0; i < structuredData.sections.length; i++) {
-        const section = structuredData.sections[i];
-        await supabase.from("lab_sections").insert({
-          lab_id: labId,
-          section_type: section.type || "other",
-          title: section.title,
-          content: section.content,
-          sort_order: i,
-        });
-      }
-    }
-
-    // Generate overview (strict grounding)
     const overviewPrompt = `${GROUNDING_PREAMBLE}
 
 You are an academic lab assistant. Create a brief LAB OVERVIEW from this assignment.
@@ -187,7 +164,7 @@ OUTPUT FORMAT:
   "title": "Lab title/name (from document)",
   "about": "1-2 sentences: What this lab is about",
   "end_goal": "What must work or be submitted to pass",
-  "key_concepts": ["Concept 1", "Concept 2"] // Only concepts EXPLICITLY mentioned
+  "key_concepts": ["Concept 1", "Concept 2"]
 }
 
 STRICT RULES:
@@ -196,49 +173,8 @@ STRICT RULES:
 - Do NOT invent requirements or add features not in the document
 
 Document content:
-${documentContent.substring(0, 20000)}`;
+${docSlice20k}`;
 
-    const overviewResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: overviewPrompt }],
-        temperature: 0.1,
-      }),
-    });
-
-    let summaryContent: { title: string; bullets: string[]; about?: string; end_goal?: string; key_concepts?: string[] } = { title: "Lab Summary", bullets: [] };
-    if (overviewResponse.ok) {
-      const overviewResult = await overviewResponse.json();
-      try {
-        const content = overviewResult.choices[0].message.content;
-        const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
-                          content.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-        const parsed = JSON.parse(jsonStr);
-        // Convert to legacy format for compatibility, but include new fields
-        summaryContent = {
-          title: parsed.title || "Lab Summary",
-          bullets: [
-            parsed.about,
-            `End goal: ${parsed.end_goal}`,
-            ...(parsed.key_concepts || []).map((c: string) => `Key concept: ${c}`)
-          ].filter(Boolean),
-          about: parsed.about,
-          end_goal: parsed.end_goal,
-          key_concepts: parsed.key_concepts,
-        };
-      } catch (e) {
-        console.error("Failed to parse overview:", e);
-      }
-    }
-
-    // Generate ACTIONABLE step-by-step execution plan (strict grounding)
-    // PRIORITY: Look for explicit "Hands-on" sections in the document
     const approachPrompt = `${GROUNDING_PREAMBLE}
 
 You are an academic lab assistant. Convert this lab assignment into a PRACTICAL, ACTIONABLE execution plan.
@@ -256,237 +192,145 @@ FORMAT EACH STEP AS IMPERATIVE INSTRUCTIONS:
 - Preserve the EXACT sequence from the document
 - Do NOT merge or skip hands-on sections
 
-STRICT RULES:
-- Extract VERBATIM instructions from hands-on sections when present
-- Base ALL steps on actual document requirements
-- Do NOT invent steps that are not in the document
-- If requirements are unclear: state "Not specified - clarify with lecturer"
-- Include the original hands-on number as reference
-
 Document content:
-${documentContent.substring(0, 25000)}
+${docSlice25k}
 
 Return JSON in this format:
 {
   "steps": [
     {
       "number": 1,
-      "title": "Short action title (e.g., 'Hands-on #1: Save simulation as new file')",
-      "action_items": [
-        "Open File / Save World As... menu",
-        "Save the simulation as obstacles.wbt",
-        "Verify the file is saved correctly"
-      ],
+      "title": "Short action title",
+      "action_items": ["Step 1", "Step 2"],
       "commands": [],
-      "files_to_create": ["obstacles.wbt"],
+      "files_to_create": [],
       "verification": "How to verify this step is complete",
-      "pitfalls": ["Do NOT skip X", "Common mistake: Y"],
-      "source": "Hands-on #1" 
+      "pitfalls": [],
+      "source": "Document section reference"
     }
   ],
-  "tools_required": ["List of tools/software mentioned in document"],
-  "time_estimate": "Estimated time if mentioned, or 'Not specified'",
+  "tools_required": [],
+  "time_estimate": "Not specified",
   "has_explicit_hands_on": true
 }`;
 
-    const approachResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: approachPrompt }],
-        temperature: 0.15,
-      }),
-    });
-
-    let approachContent: { steps: unknown[]; tools_required?: string[]; time_estimate?: string } = { steps: [] };
-    if (approachResponse.ok) {
-      const approachResult = await approachResponse.json();
-      try {
-        const content = approachResult.choices[0].message.content;
-        const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
-                          content.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-        approachContent = JSON.parse(jsonStr);
-      } catch (e) {
-        console.error("Failed to parse approach:", e);
-      }
-    }
-
-    // Generate practical "How-To" guidance for specific tools/techniques
     const howToPrompt = `${GROUNDING_PREAMBLE}
 
 You are an academic lab assistant. Analyze this lab document to extract PRACTICAL HOW-TO WORKFLOWS.
 
-CRITICAL: DO NOT RELY ONLY ON EXPLICIT STEP-BY-STEP SECTIONS.
-
-Instead, scan the ENTIRE document semantically and extract workflows from:
-- Explanations and descriptions of concepts
-- Theory sections that describe processes
-- Examples showing how things work
-- Contextual clues like "First...", "Before...", "This requires...", "To achieve...", "In practice..."
-- Implied actions from lab goals and deliverables
-
-🔍 DETECTION RULES:
-1. If something is described, infer it must be done
-2. If a concept is explained, extract the setup/configuration steps
-3. If a result is shown, infer the process that produces it
-4. Treat inferred steps equally with explicit steps
-
-📋 WHAT COUNTS AS A WORKFLOW/TASK:
-- Any configuration or setup action
-- Any preparation requirement
-- Any tool/software usage pattern
-- Any logical sequence needed to achieve a result
-- Process flows hidden in explanations
-
-📝 OUTPUT FORMAT:
-For each detected workflow/task, provide:
-1. Clear task title (e.g., "Configure Floor Physics", "Set up Sphere Geometry")
-2. Ordered steps with:
-   - Action: What to do (imperative)
-   - Reasoning: Why this step exists (from document context)
-3. If a step is implied/inferred, that's valid - document context justifies it
+Scan the ENTIRE document semantically and extract workflows from explanations, theory sections, examples, and implied actions.
 
 Document content:
-${documentContent.substring(0, 20000)}
+${docSlice20k}
 
 Return JSON:
 {
   "workflows": [
     {
       "title": "Task or workflow name",
-      "description": "Brief context of when/why this workflow is used",
+      "description": "Brief context",
       "steps": [
-        {
-          "number": 1,
-          "action": "What to do (imperative verb)",
-          "reasoning": "Why this step is necessary (from document)",
-          "type": "explicit|inferred"
-        },
-        {
-          "number": 2,
-          "action": "Next action",
-          "reasoning": "Context from document",
-          "type": "explicit|inferred"
-        }
+        { "number": 1, "action": "What to do", "reasoning": "Why", "type": "explicit|inferred" }
       ],
-      "tools_involved": ["Tool1", "Tool2"],
-      "source": "Document section(s) that explain this workflow"
+      "tools_involved": [],
+      "source": "Document section reference"
     }
-  ],
-  "note": "Summary of extraction approach if needed"
+  ]
 }`;
 
-    const howToResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: howToPrompt }],
-        temperature: 0.15,
-      }),
-    });
-
-    let howToContent: { how_to_guides: unknown[] } = { how_to_guides: [] };
-    if (howToResponse.ok) {
-      const howToResult = await howToResponse.json();
-      try {
-        const content = howToResult.choices[0].message.content;
-        const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
-                          content.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-        howToContent = JSON.parse(jsonStr);
-      } catch (e) {
-        console.error("Failed to parse how-to:", e);
-      }
-    }
-
-    // Generate SUCCESS CHECKLIST with common mistakes (strict grounding)
     const checklistPrompt = `${GROUNDING_PREAMBLE}
 
 You are an academic lab assistant. Create a LAB SUCCESS CHECKLIST from this assignment.
 
 Include:
-1. ✅ MUST EXIST TO PASS - What deliverables are required
-2. ✅ MUST COMPILE/RUN - What must work technically  
-3. ✅ COMMONLY FORGOTTEN - Things students often miss
-4. ⚠️ TYPICAL MISTAKES - Common errors to avoid
-
-STRICT RULES:
-- Only include items from the document OR logical requirements (like "code must compile")
-- Mark items with "needs_clarification": true if implied but not stated
-- Use exact document wording where possible
-- Reference document sections
+1. MUST EXIST TO PASS - What deliverables are required
+2. MUST COMPILE/RUN - What must work technically
+3. COMMONLY FORGOTTEN - Things students often miss
+4. TYPICAL MISTAKES - Common errors to avoid
 
 Document content:
-${documentContent.substring(0, 18000)}
+${docSlice18k}
 
 Return JSON:
 {
   "must_exist": [
-    { "text": "Deliverable (exact wording)", "source": "Section ref", "needs_clarification": false }
+    { "text": "Deliverable", "source": "Section ref", "needs_clarification": false }
   ],
   "must_work": [
-    { "text": "What must compile/run/function", "source": "Section ref" }
+    { "text": "What must compile/run", "source": "Section ref" }
   ],
   "commonly_forgotten": [
-    { "text": "Thing students often miss", "why": "Why it's easy to forget" }
+    { "text": "Thing students miss", "why": "Why easy to forget" }
   ],
   "typical_mistakes": [
     { "mistake": "Common error", "consequence": "What goes wrong", "prevention": "How to avoid" }
   ],
-  "submission_format": "How to submit (if specified, else 'Not specified in document')"
+  "submission_format": "How to submit or 'Not specified'"
 }`;
 
-    const checklistResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [{ role: "user", content: checklistPrompt }],
-        temperature: 0.1,
-      }),
-    });
+    // Run ALL AI calls in parallel for maximum speed
+    const [structuredData, overviewData, approachData, howToData, checklistData] = await Promise.all([
+      callAI(structurePrompt).catch(e => { console.error("Structure parse failed:", e); return null; }),
+      callAI(overviewPrompt).catch(e => { console.error("Overview parse failed:", e); return null; }),
+      callAI(approachPrompt).catch(e => { console.error("Approach parse failed:", e); return null; }),
+      callAI(howToPrompt).catch(e => { console.error("How-to parse failed:", e); return null; }),
+      callAI(checklistPrompt).catch(e => { console.error("Checklist parse failed:", e); return null; }),
+    ]);
 
-    let checklistContent: { 
-      items?: unknown[]; 
-      must_exist?: unknown[]; 
-      must_work?: unknown[]; 
-      commonly_forgotten?: unknown[]; 
-      typical_mistakes?: unknown[];
-      submission_format?: string;
-    } = { items: [] };
-    if (checklistResponse.ok) {
-      const checklistResult = await checklistResponse.json();
-      try {
-        const content = checklistResult.choices[0].message.content;
-        const jsonMatch = content.match(/```json\n?([\s\S]*?)\n?```/) || 
-                          content.match(/\{[\s\S]*\}/);
-        const jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : content;
-        const parsed = JSON.parse(jsonStr);
-        // Include both new format and legacy compatibility
-        checklistContent = {
-          ...parsed,
-          // Legacy format for backward compatibility
-          items: [
-            ...(parsed.must_exist || []),
-            ...(parsed.must_work || []).map((item: { text: string }) => ({ ...item, required: true })),
-          ]
-        };
-      } catch (e) {
-        console.error("Failed to parse checklist:", e);
+    // Process structure result
+    const structResult = structuredData as { description?: string; sections?: Array<{ type: string; title: string; content: string }> } | null;
+
+    // Update lab description
+    if (structResult?.description) {
+      await supabase
+        .from("lab_documents")
+        .update({ description: structResult.description })
+        .eq("id", labId);
+    }
+
+    // Insert extracted sections
+    if (structResult?.sections && Array.isArray(structResult.sections)) {
+      for (let i = 0; i < structResult.sections.length; i++) {
+        const section = structResult.sections[i];
+        await supabase.from("lab_sections").insert({
+          lab_id: labId,
+          section_type: section.type || "other",
+          title: section.title,
+          content: section.content,
+          sort_order: i,
+        });
       }
     }
+
+    // Process overview
+    const overviewResult = overviewData as { title?: string; about?: string; end_goal?: string; key_concepts?: string[] } | null;
+    const summaryContent = overviewResult ? {
+      title: overviewResult.title || "Lab Summary",
+      bullets: [
+        overviewResult.about,
+        `End goal: ${overviewResult.end_goal}`,
+        ...(overviewResult.key_concepts || []).map((c: string) => `Key concept: ${c}`)
+      ].filter(Boolean),
+      about: overviewResult.about,
+      end_goal: overviewResult.end_goal,
+      key_concepts: overviewResult.key_concepts,
+    } : { title: "Lab Summary", bullets: [] };
+
+    // Process approach
+    const approachContent = (approachData as { steps: unknown[] } | null) || { steps: [] };
+
+    // Process how-to
+    const howToContent = (howToData as { how_to_guides?: unknown[]; workflows?: unknown[] } | null) || { how_to_guides: [] };
+
+    // Process checklist
+    const checklistRaw = checklistData as { must_exist?: unknown[]; must_work?: Array<{ text: string }>; commonly_forgotten?: unknown[]; typical_mistakes?: unknown[]; submission_format?: string } | null;
+    const checklistContent = checklistRaw ? {
+      ...checklistRaw,
+      items: [
+        ...(checklistRaw.must_exist || []),
+        ...(checklistRaw.must_work || []).map((item) => ({ ...item, required: true })),
+      ]
+    } : { items: [] };
 
     // Save generated assets
     const now = new Date().toISOString();
