@@ -91,7 +91,6 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: T
   const [isOpen, setIsOpen] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
-  const [showEditDialog, setShowEditDialog] = useState(false);
   const [editData, setEditData] = useState({
     title: topic.title,
     source_type: topic.source_type || 'SLIDES',
