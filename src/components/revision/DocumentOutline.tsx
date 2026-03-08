@@ -12,7 +12,7 @@ import { TopicDetailDialog } from './TopicDetailDialog';
 interface DocumentOutlineProps {
   theoryTopicId: string;
   documentTitle: string;
-  documentContent?: string;
+  filePath?: string | null;
   parsingStatus?: string;
   onParseDocument?: () => void;
 }
@@ -20,7 +20,7 @@ interface DocumentOutlineProps {
 export function DocumentOutline({ 
   theoryTopicId, 
   documentTitle,
-  documentContent,
+  filePath,
   parsingStatus,
 }: DocumentOutlineProps) {
   const { data: chapters, isLoading } = useDocumentChapters(theoryTopicId);
@@ -50,10 +50,10 @@ export function DocumentOutline({
   };
 
   const handleParse = () => {
-    if (!documentContent) return;
+    if (!filePath) return;
     parseDocument.mutate({
       theoryTopicId,
-      documentContent,
+      filePath,
       documentTitle,
     });
   };
@@ -81,7 +81,7 @@ export function DocumentOutline({
       return (
         <div className="space-y-3 py-4">
           <p className="text-sm text-destructive">Failed to parse document. Please try again.</p>
-          <Button size="sm" onClick={handleParse} disabled={!documentContent}>
+          <Button size="sm" onClick={handleParse} disabled={!filePath}>
             <Sparkles className="h-4 w-4 mr-2" />
             Retry Analysis
           </Button>
@@ -97,7 +97,7 @@ export function DocumentOutline({
         <Button 
           size="sm" 
           onClick={handleParse} 
-          disabled={!documentContent || parseDocument.isPending}
+          disabled={!filePath || parseDocument.isPending}
         >
           <Sparkles className="h-4 w-4 mr-2" />
           Analyze Document

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -90,8 +90,6 @@ interface TheoryTopicCardProps {
 export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: TheoryTopicCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
-  const [documentContent, setDocumentContent] = useState<string | undefined>();
-  const [loadingContent, setLoadingContent] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editData, setEditData] = useState({
     title: topic.title,
@@ -126,40 +124,6 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: T
   const isParsed = topic.parsing_status === 'completed';
   const isParsing = topic.parsing_status === 'parsing';
 
-  // Load document content when outline is shown for parsing
-  useEffect(() => {
-    if (showOutline && canParse && !documentContent && !isParsed && (topic.source_url || topic.file_path)) {
-      setLoadingContent(true);
-      
-      const loadContent = async () => {
-        try {
-          // If we have a file_path, download from storage (works for PDFs)
-          if (topic.file_path) {
-            const { data, error } = await (await import('@/integrations/supabase/client')).supabase.storage
-              .from('course-materials')
-              .download(topic.file_path);
-            
-            if (error) throw error;
-            const text = await data.text();
-            setDocumentContent(text);
-          } else if (topic.source_url) {
-            // For URLs, try fetching directly
-            const res = await fetch(topic.source_url);
-            if (res.ok) {
-              const text = await res.text();
-              setDocumentContent(text);
-            }
-          }
-        } catch (err) {
-          console.error('Failed to load document:', err);
-        } finally {
-          setLoadingContent(false);
-        }
-      };
-      
-      loadContent();
-    }
-  }, [showOutline, canParse, documentContent, isParsed, topic.source_url, topic.file_path]);
 
   const handleStatusClick = () => {
     const nextStatus = topic.status === 'NOT_VIEWED' 
@@ -258,19 +222,12 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: T
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-3">
                   <div className="rounded-lg border bg-muted/30 p-4">
-                    {loadingContent ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading document content...
-                      </div>
-                    ) : (
                       <DocumentOutline
                         theoryTopicId={topic.id}
                         documentTitle={topic.title}
-                        documentContent={documentContent}
+                        filePath={topic.file_path}
                         parsingStatus={topic.parsing_status || 'pending'}
                       />
-                    )}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
