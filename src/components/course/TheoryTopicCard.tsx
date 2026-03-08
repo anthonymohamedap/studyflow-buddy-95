@@ -90,8 +90,7 @@ interface TheoryTopicCardProps {
 export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: TheoryTopicCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showOutline, setShowOutline] = useState(false);
-  const [documentContent, setDocumentContent] = useState<string | undefined>();
-  const [loadingContent, setLoadingContent] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editData, setEditData] = useState({
     title: topic.title,
