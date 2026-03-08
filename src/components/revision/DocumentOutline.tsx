@@ -12,7 +12,7 @@ import { TopicDetailDialog } from './TopicDetailDialog';
 interface DocumentOutlineProps {
   theoryTopicId: string;
   documentTitle: string;
-  documentContent?: string;
+  filePath?: string | null;
   parsingStatus?: string;
   onParseDocument?: () => void;
 }
