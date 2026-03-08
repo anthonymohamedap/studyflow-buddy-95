@@ -6,236 +6,78 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-type AssetType = "summary" | "flashcards" | "quiz" | "keywords";
-
-const PROMPTS: Record<AssetType, string> = {
-  summary: `You are an expert educational content summarizer.
-Create a comprehensive summary of the given topic content.
-
-IMPORTANT RULES:
-1. ONLY use information present in the provided content
-2. If information is incomplete, say "Not found in material" for that section
-3. Never invent facts or add information not in the source
-
-Output a JSON object:
-{
-  "mainPoints": ["Key point 1", "Key point 2", ...],
-  "detailedExplanation": "A 2-3 paragraph detailed explanation",
-  "keyTakeaways": ["Takeaway 1", "Takeaway 2", ...]
-}`,
-
-  flashcards: `You are an expert educational flashcard creator.
-Create flashcards based ONLY on the given content.
-
-IMPORTANT RULES:
-1. Every flashcard must be directly derived from the provided content
-2. Never invent facts or questions not supported by the source
-3. Create 5-10 high-quality flashcards
-
-Output a JSON object:
-{
-  "cards": [
-    {
-      "question": "Question text",
-      "answer": "Answer text",
-      "difficulty": "easy" | "medium" | "hard"
-    }
-  ]
-}`,
-
-  quiz: `You are an expert educational quiz creator.
-Create a quiz based ONLY on the given content.
-
-IMPORTANT RULES:
-1. All questions must be answerable from the provided content
-2. Never invent questions about topics not covered
-3. Create 5-8 questions mixing MCQ and open-ended
-
-Output a JSON object:
-{
-  "questions": [
-    {
-      "type": "mcq" | "open",
-      "question": "Question text",
-      "options": ["A", "B", "C", "D"] | null,
-      "correctAnswer": "The correct answer",
-      "explanation": "Why this is correct"
-    }
-  ]
-}`,
-
-  keywords: `You are an expert at extracting key terms and definitions.
-Extract key terms and their definitions from the given content.
-
-IMPORTANT RULES:
-1. Only extract terms that are actually defined or explained in the content
-2. If a term's definition is unclear, mark it as "Definition not fully provided in material"
-3. Extract 5-15 key terms
-
-Output a JSON object:
-{
-  "terms": [
-    {
-      "term": "Term name",
-      "definition": "Definition from the material",
-      "importance": "high" | "medium" | "low"
-    }
-  ]
-}`,
-};
-
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+
+  const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+  const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const middlewareUrl = Deno.env.get("MIDDLEWARE_URL") ?? "http://localhost:5000";
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error("Supabase configuration missing");
-    }
-
     const { topicId, assetType, topicContent, topicTitle } = await req.json();
 
     if (!topicId || !assetType || !topicContent) {
       return new Response(
-        JSON.stringify({ error: "topicId, assetType, and topicContent are required" }),
+        JSON.stringify({ error: "topicId, assetType en topicContent zijn vereist" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     if (!["summary", "flashcards", "quiz", "keywords"].includes(assetType)) {
       return new Response(
-        JSON.stringify({ error: "Invalid assetType" }),
+        JSON.stringify({ error: "Ongeldig assetType" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
-    // Verify topic exists
     const { data: topic, error: topicError } = await supabase
-      .from("document_topics")
-      .select("id")
-      .eq("id", topicId)
-      .single();
+      .from("document_topics").select("id").eq("id", topicId).single();
 
     if (topicError || !topic) {
       return new Response(
-        JSON.stringify({ error: "Topic not found" }),
+        JSON.stringify({ error: "Topic niet gevonden" }),
         { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Mark as generating
-    await supabase
-      .from("revision_assets")
-      .upsert({
-        topic_id: topicId,
-        asset_type: assetType,
-        is_generating: true,
-        content: {},
-      }, { onConflict: "topic_id,asset_type" });
+    await supabase.from("revision_assets").upsert(
+      { topic_id: topicId, asset_type: assetType, is_generating: true, content: {} },
+      { onConflict: "topic_id,asset_type" }
+    );
 
-    // Generate content with AI
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const middlewareRes = await fetch(`${middlewareUrl}/generate-revision`, {
       method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: PROMPTS[assetType as AssetType] },
-          {
-            role: "user",
-            content: `Generate ${assetType} for this topic "${topicTitle || 'Untitled'}":\n\n${topicContent}`,
-          },
-        ],
-        response_format: { type: "json_object" },
-      }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topicId, assetType, topicContent, topicTitle }),
     });
 
-    if (!response.ok) {
-      if (response.status === 429) {
-        await supabase
-          .from("revision_assets")
-          .update({ is_generating: false })
-          .eq("topic_id", topicId)
-          .eq("asset_type", assetType);
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      if (response.status === 402) {
-        await supabase
-          .from("revision_assets")
-          .update({ is_generating: false })
-          .eq("topic_id", topicId)
-          .eq("asset_type", assetType);
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits to continue." }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-      const errorText = await response.text();
-      throw new Error(`AI gateway error: ${errorText}`);
-    }
+    if (!middlewareRes.ok) throw new Error(`Middleware fout: ${await middlewareRes.text()}`);
 
-    const aiResult = await response.json();
-    const generatedContent = JSON.parse(aiResult.choices[0].message.content);
+    const { content } = await middlewareRes.json();
 
-    // Update the revision asset
-    const { error: updateError } = await supabase
-      .from("revision_assets")
-      .update({
-        content: generatedContent,
-        is_generating: false,
-        generated_at: new Date().toISOString(),
-      })
-      .eq("topic_id", topicId)
-      .eq("asset_type", assetType);
-
-    if (updateError) {
-      throw updateError;
-    }
+    await supabase.from("revision_assets").update({
+      content,
+      is_generating: false,
+      generated_at: new Date().toISOString(),
+    }).eq("topic_id", topicId).eq("asset_type", assetType);
 
     return new Response(
-      JSON.stringify({ success: true, content: generatedContent }),
+      JSON.stringify({ success: true, content }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
-    console.error("Generate revision error:", error);
-
-    // Try to reset generating status
+    console.error("generate-revision fout:", error);
     try {
       const { topicId, assetType } = await req.clone().json();
       if (topicId && assetType) {
-        const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-        const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-        if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
-          const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-          await supabase
-            .from("revision_assets")
-            .update({ is_generating: false })
-            .eq("topic_id", topicId)
-            .eq("asset_type", assetType);
-        }
+        await supabase.from("revision_assets").update({ is_generating: false })
+          .eq("topic_id", topicId).eq("asset_type", assetType);
       }
     } catch {}
-
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Unknown error" }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Onbekend" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }

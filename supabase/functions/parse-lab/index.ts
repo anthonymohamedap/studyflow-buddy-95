@@ -3,19 +3,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const middlewareUrl = Deno.env.get("MIDDLEWARE_URL") ?? "http://localhost:5000";
-
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
@@ -24,10 +20,7 @@ serve(async (req) => {
     if (!labId) throw new Error("labId is vereist");
 
     const { data: lab, error: labError } = await supabase
-      .from("lab_documents")
-      .select("id, course_id")
-      .eq("id", labId)
-      .single();
+      .from("lab_documents").select("id, course_id").eq("id", labId).single();
 
     if (labError || !lab) {
       return new Response(
@@ -38,48 +31,46 @@ serve(async (req) => {
 
     await supabase.from("lab_documents").update({ parsing_status: "parsing" }).eq("id", labId);
 
-    let documentContent = fileContent;
+    const filename = filePath ? (filePath.split("/").pop() ?? "lab.pdf") : "lab.pdf";
     let fileBase64: string | undefined;
 
-    if (filePath && !fileContent) {
+    if (filePath) {
+      // Download en converteer naar base64
       const { data: fileData, error: downloadError } = await supabase.storage
-        .from("course-materials")
-        .download(filePath);
+        .from("course-materials").download(filePath);
 
       if (downloadError) throw new Error(`Download mislukt: ${downloadError.message}`);
 
       const arrayBuffer = await fileData.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
-      fileBase64 = btoa(String.fromCharCode(...uint8Array));
+      let binary = "";
+      for (let i = 0; i < uint8Array.length; i += 8192) {
+        binary += String.fromCharCode(...uint8Array.subarray(i, i + 8192));
+      }
+      fileBase64 = btoa(binary);
     }
 
     const middlewareRes = await fetch(`${middlewareUrl}/parse-lab`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        documentContent,
         fileContent: fileBase64,
-        filename: filePath ? filePath.split("/").pop() : "lab.pdf",
+        documentContent: fileContent,
+        filename,
       }),
     });
 
-    if (!middlewareRes.ok) {
-      const err = await middlewareRes.text();
-      throw new Error(`Middleware fout: ${err}`);
-    }
+    if (!middlewareRes.ok) throw new Error(`Middleware fout: ${await middlewareRes.text()}`);
 
     const result = await middlewareRes.json();
     const now = new Date().toISOString();
 
     if (result.sections?.length) {
       for (let i = 0; i < result.sections.length; i++) {
-        const section = result.sections[i];
+        const s = result.sections[i];
         await supabase.from("lab_sections").insert({
-          lab_id: labId,
-          section_type: section.type || "other",
-          title: section.title,
-          content: section.content,
-          sort_order: i,
+          lab_id: labId, section_type: s.type || "other",
+          title: s.title, content: s.content, sort_order: i,
         });
       }
     }
@@ -91,12 +82,15 @@ serve(async (req) => {
       { lab_id: labId, asset_type: "how_to",        content: result.howTo,     generated_at: now, is_generating: false },
     ], { onConflict: "lab_id,asset_type" });
 
-    await supabase.from("lab_documents").update({ parsing_status: "completed", parsed_at: now }).eq("id", labId);
+    await supabase.from("lab_documents")
+      .update({ parsing_status: "completed", parsed_at: now })
+      .eq("id", labId);
 
     return new Response(
       JSON.stringify({ success: true, ...result }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (error) {
     console.error("parse-lab fout:", error);
     try {
@@ -104,12 +98,12 @@ serve(async (req) => {
       if (labId) {
         await supabase.from("lab_documents").update({
           parsing_status: "error",
-          parsing_error: error instanceof Error ? error.message : "Onbekende fout",
+          parsing_error: error instanceof Error ? error.message : "Onbekend",
         }).eq("id", labId);
       }
-    } catch { }
+    } catch {}
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : "Onbekende fout" }),
+      JSON.stringify({ error: error instanceof Error ? error.message : "Onbekend" }),
       { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
