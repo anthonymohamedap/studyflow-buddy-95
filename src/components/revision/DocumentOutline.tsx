@@ -20,7 +20,7 @@ interface DocumentOutlineProps {
 export function DocumentOutline({ 
   theoryTopicId, 
   documentTitle,
-  documentContent,
+  filePath,
   parsingStatus,
 }: DocumentOutlineProps) {
   const { data: chapters, isLoading } = useDocumentChapters(theoryTopicId);
