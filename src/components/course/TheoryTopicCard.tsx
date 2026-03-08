@@ -222,19 +222,12 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: T
                 </CollapsibleTrigger>
                 <CollapsibleContent className="mt-3">
                   <div className="rounded-lg border bg-muted/30 p-4">
-                    {loadingContent ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Loading document content...
-                      </div>
-                    ) : (
                       <DocumentOutline
                         theoryTopicId={topic.id}
                         documentTitle={topic.title}
-                        documentContent={documentContent}
+                        filePath={topic.file_path}
                         parsingStatus={topic.parsing_status || 'pending'}
                       />
-                    )}
                   </div>
                 </CollapsibleContent>
               </Collapsible>
