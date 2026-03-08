@@ -99,11 +99,11 @@ export function useParseDocument() {
   return useMutation({
     mutationFn: async ({ 
       theoryTopicId, 
-      documentContent, 
+      filePath, 
       documentTitle 
     }: { 
       theoryTopicId: string; 
-      documentContent: string; 
+      filePath: string; 
       documentTitle?: string;
     }) => {
       const response = await fetch(
@@ -114,7 +114,7 @@ export function useParseDocument() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
           },
-          body: JSON.stringify({ theoryTopicId, documentContent, documentTitle }),
+          body: JSON.stringify({ theoryTopicId, filePath, documentTitle }),
         }
       );
 
