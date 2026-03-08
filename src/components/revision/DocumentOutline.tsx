@@ -50,10 +50,10 @@ export function DocumentOutline({
   };
 
   const handleParse = () => {
-    if (!documentContent) return;
+    if (!filePath) return;
     parseDocument.mutate({
       theoryTopicId,
-      documentContent,
+      filePath,
       documentTitle,
     });
   };
