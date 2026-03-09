@@ -13,14 +13,19 @@ import {
   Code,
   Sparkles,
   GraduationCap,
-  HelpCircle,
   List,
   X,
-  User
+  User,
+  History,
+  Trash2,
+  MessageSquarePlus
 } from 'lucide-react';
 import { useStudyAssistant } from '@/hooks/useStudyAssistant';
+import { useChatHistory } from '@/hooks/useChatHistory';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
+import { formatDistanceToNow } from 'date-fns';
+import { nl } from 'date-fns/locale';
 
 type AIPolicy = "ALLOWED" | "LIMITED" | "FORBIDDEN";
 
@@ -30,6 +35,7 @@ interface AIStudyChatProps {
   aiPolicy: AIPolicy;
   topicTitle?: string;
   courseContext?: string;
+  courseId?: string;
   onClose?: () => void;
 }
 
@@ -44,13 +50,27 @@ export function AIStudyChat({
   aiPolicy, 
   topicTitle,
   courseContext,
+  courseId,
   onClose 
 }: AIStudyChatProps) {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   
   const { isLoading, response, sendRequest, reset } = useStudyAssistant();
+  const {
+    conversations,
+    activeConversationId,
+    loadMessages,
+    createConversation,
+    saveMessage,
+    deleteConversation,
+    startNewChat,
+    messages: savedMessages,
+    loadingConversations,
+    loadingMessages,
+  } = useChatHistory(courseId);
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -59,12 +79,24 @@ export function AIStudyChat({
     }
   }, [chatMessages, response, isLoading]);
 
-  // When a streaming response completes, add it to chat history
+  // When loading a saved conversation, set messages
+  useEffect(() => {
+    if (savedMessages.length > 0) {
+      setChatMessages(savedMessages.map(m => ({ role: m.role, content: m.content })));
+      setShowHistory(false);
+    }
+  }, [savedMessages]);
+
+  // When a response completes, add it to chat history and save
   useEffect(() => {
     if (!isLoading && response && chatMessages.length > 0) {
       const lastMsg = chatMessages[chatMessages.length - 1];
       if (lastMsg.role === "user") {
         setChatMessages(prev => [...prev, { role: "assistant", content: response }]);
+        // Save assistant message to DB
+        if (activeConversationId) {
+          saveMessage(activeConversationId, "assistant", response);
+        }
         reset();
       }
     }
@@ -80,9 +112,17 @@ export function AIStudyChat({
     const updatedMessages = [...chatMessages, newUserMessage];
     setChatMessages(updatedMessages);
 
-    // Build messages array for API including context
-    const apiMessages = updatedMessages.map(m => ({ role: m.role, content: m.content }));
+    // Create conversation if needed, then save user message
+    let convId = activeConversationId;
+    if (!convId) {
+      convId = await createConversation(contentType, topicTitle);
+    }
+    if (convId) {
+      await saveMessage(convId, "user", text);
+    }
 
+    // Build messages array for API
+    const apiMessages = updatedMessages.map(m => ({ role: m.role, content: m.content }));
     await sendRequest(apiMessages, courseContext, content.slice(0, 6000));
   };
 
@@ -104,6 +144,16 @@ export function AIStudyChat({
     }
   };
 
+  const handleNewChat = () => {
+    setChatMessages([]);
+    reset();
+    startNewChat();
+  };
+
+  const handleLoadConversation = (convId: string) => {
+    loadMessages(convId);
+  };
+
   const getPolicyBadge = () => {
     switch (aiPolicy) {
       case "ALLOWED":
@@ -117,6 +167,79 @@ export function AIStudyChat({
 
   const hasMessages = chatMessages.length > 0;
 
+  // History panel
+  if (showHistory) {
+    return (
+      <Card className="flex flex-col h-full">
+        <CardHeader className="pb-3 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <History className="h-5 w-5 text-primary" />
+              Chatgeschiedenis
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="icon" onClick={() => setShowHistory(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="flex-1 overflow-hidden pb-4">
+          <Button 
+            variant="outline" 
+            className="w-full mb-3 gap-2" 
+            onClick={() => { handleNewChat(); setShowHistory(false); }}
+          >
+            <MessageSquarePlus className="h-4 w-4" />
+            Nieuwe chat
+          </Button>
+          <ScrollArea className="h-[calc(100%-48px)]">
+            {loadingConversations ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            ) : conversations.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="text-sm">Nog geen chatgeschiedenis</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {conversations.map((conv) => (
+                  <div 
+                    key={conv.id} 
+                    className={cn(
+                      "flex items-center justify-between p-3 rounded-lg border cursor-pointer hover:bg-muted/50 transition-colors",
+                      activeConversationId === conv.id && "bg-muted border-primary/30"
+                    )}
+                    onClick={() => handleLoadConversation(conv.id)}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {conv.topic_title || "Chat"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDistanceToNow(new Date(conv.updated_at), { addSuffix: true, locale: nl })}
+                      </p>
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-7 w-7 flex-shrink-0"
+                      onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id); }}
+                    >
+                      <Trash2 className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </ScrollArea>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card className="flex flex-col h-full">
       <CardHeader className="pb-3 flex-shrink-0">
@@ -127,6 +250,11 @@ export function AIStudyChat({
           </CardTitle>
           <div className="flex items-center gap-2">
             {getPolicyBadge()}
+            {courseId && (
+              <Button variant="ghost" size="icon" onClick={() => setShowHistory(true)} title="Chatgeschiedenis">
+                <History className="h-4 w-4" />
+              </Button>
+            )}
             {onClose && (
               <Button variant="ghost" size="icon" onClick={onClose}>
                 <X className="h-4 w-4" />
@@ -233,7 +361,7 @@ export function AIStudyChat({
           </ScrollArea>
         )}
 
-        {/* Input area - always visible */}
+        {/* Input area */}
         <div className="mt-3 pt-3 border-t flex-shrink-0">
           <div className="flex gap-2">
             <Textarea
@@ -255,7 +383,6 @@ export function AIStudyChat({
             </Button>
           </div>
           
-          {/* Quick action chips when in conversation */}
           {hasMessages && !isLoading && (
             <div className="flex gap-1.5 mt-2 flex-wrap">
               <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleQuickAction("exam-question")}>
@@ -266,10 +393,7 @@ export function AIStudyChat({
                 <List className="h-3 w-3" />
                 MC Question
               </Button>
-              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => {
-                setChatMessages([]);
-                reset();
-              }}>
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={handleNewChat}>
                 <RefreshCw className="h-3 w-3" />
                 New Chat
               </Button>
