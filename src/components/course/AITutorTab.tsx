@@ -225,6 +225,7 @@ export function AITutorTab({ courseId, courseName, aiPolicy }: AITutorTabProps) 
             aiPolicy={aiPolicy}
             topicTitle={selectedSource.title}
             courseContext={courseName}
+            courseId={courseId}
             onClose={() => setSelectedSource(null)}
           />
         ) : (
