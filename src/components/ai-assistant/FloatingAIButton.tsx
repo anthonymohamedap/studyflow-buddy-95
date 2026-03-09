@@ -16,6 +16,7 @@ type AIPolicy = "ALLOWED" | "LIMITED" | "FORBIDDEN";
 interface FloatingAIButtonProps {
   aiPolicy: AIPolicy;
   courseName?: string;
+  courseId?: string;
   defaultContent?: string;
   defaultContentType?: "theory" | "lab";
   defaultTopicTitle?: string;
