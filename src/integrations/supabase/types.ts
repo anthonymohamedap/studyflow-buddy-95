@@ -140,6 +140,76 @@ export type Database = {
           },
         ]
       }
+      chat_conversations: {
+        Row: {
+          content_type: string
+          course_id: string | null
+          created_at: string
+          id: string
+          topic_title: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          content_type?: string
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          topic_title?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          content_type?: string
+          course_id?: string | null
+          created_at?: string
+          id?: string
+          topic_title?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_conversations_course_id_fkey"
+            columns: ["course_id"]
+            isOneToOne: false
+            referencedRelation: "courses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          role: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "chat_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       courses: {
         Row: {
           ai_policy: Database["public"]["Enums"]["ai_policy"]
