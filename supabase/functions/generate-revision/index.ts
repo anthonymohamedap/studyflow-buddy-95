@@ -11,7 +11,8 @@ serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
   const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-  const middlewareUrl = Deno.env.get("MIDDLEWARE_URL") ?? "https://blaine-unrefreshed-swingingly.ngrok-free.dev";
+  const middlewareUrl = Deno.env.get("MIDDLEWARE_URL");
+  if (!middlewareUrl) throw new Error("MIDDLEWARE_URL secret is niet geconfigureerd");
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
