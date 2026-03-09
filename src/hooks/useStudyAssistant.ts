@@ -2,32 +2,59 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 
 type AIPolicy = "ALLOWED" | "LIMITED" | "FORBIDDEN";
-type FeatureType = "explain" | "exam-trainer";
 type ExplainMode = "simple" | "with-code" | "with-analogy";
 type QuestionType = "exam-style" | "open" | "multiple-choice";
 type FeedbackMode = "no-hints" | "with-feedback";
 
-interface StudyAssistantRequest {
-  feature: FeatureType;
-  aiPolicy: AIPolicy;
-  content: string;
-  contentType: "theory" | "lab";
-  topicTitle?: string;
-  courseContext?: string;
-  explainMode?: ExplainMode;
-  questionType?: QuestionType;
-  feedbackMode?: FeedbackMode;
-  studentAnswer?: string;
-  previousQuestion?: string;
+const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-study-assistant`;
+
+function buildExplainMessage(
+  content: string,
+  contentType: "theory" | "lab",
+  aiPolicy: AIPolicy,
+  mode: ExplainMode,
+  topicTitle?: string,
+): string {
+  const policyNote = aiPolicy === "FORBIDDEN"
+    ? "Geef alleen conceptuele uitleg, geen code of directe antwoorden."
+    : aiPolicy === "LIMITED"
+    ? "Geef uitleg maar geen volledige oplossingen."
+    : "";
+
+  const modeNote = mode === "with-code"
+    ? "Voeg minimale code snippets toe ter illustratie."
+    : mode === "with-analogy"
+    ? "Gebruik een real-world analogie om het concept uit te leggen."
+    : "Leg het uit in eenvoudige termen.";
+
+  return `Leg het volgende ${contentType} materiaal uit${topicTitle ? ` over "${topicTitle}"` : ''}.\n\n${policyNote}\n${modeNote}\n\n---\n${content}\n---`;
 }
 
-const FUNCTION_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-study-assistant`;
+function buildQuestionMessage(
+  content: string,
+  contentType: "theory" | "lab",
+  questionType: QuestionType,
+  topicTitle?: string,
+): string {
+  return `Genereer een ${questionType} vraag gebaseerd op dit ${contentType} materiaal${topicTitle ? ` over "${topicTitle}"` : ''}:\n\n---\n${content}\n---`;
+}
+
+function buildAnswerMessage(
+  previousQuestion: string,
+  studentAnswer: string,
+): string {
+  return `De student kreeg deze vraag:\n${previousQuestion}\n\nHun antwoord:\n${studentAnswer}\n\nGeef feedback.`;
+}
 
 export function useStudyAssistant() {
   const [isLoading, setIsLoading] = useState(false);
   const [response, setResponse] = useState<string>('');
 
-  const streamRequest = useCallback(async (request: StudyAssistantRequest) => {
+  const sendRequest = useCallback(async (
+    messages: Array<{ role: string; content: string }>,
+    courseName?: string,
+    context?: string,
+  ) => {
     setIsLoading(true);
     setResponse('');
 
@@ -38,7 +65,11 @@ export function useStudyAssistant() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
         },
-        body: JSON.stringify(request),
+        body: JSON.stringify({
+          messages,
+          courseName: courseName ?? "het vak",
+          context,
+        }),
       });
 
       if (!resp.ok) {
@@ -54,69 +85,11 @@ export function useStudyAssistant() {
         return;
       }
 
-      if (!resp.body) {
-        throw new Error("No response body");
-      }
-
-      const reader = resp.body.getReader();
-      const decoder = new TextDecoder();
-      let textBuffer = "";
-      let fullResponse = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        
-        textBuffer += decoder.decode(value, { stream: true });
-
-        let newlineIndex: number;
-        while ((newlineIndex = textBuffer.indexOf("\n")) !== -1) {
-          let line = textBuffer.slice(0, newlineIndex);
-          textBuffer = textBuffer.slice(newlineIndex + 1);
-
-          if (line.endsWith("\r")) line = line.slice(0, -1);
-          if (line.startsWith(":") || line.trim() === "") continue;
-          if (!line.startsWith("data: ")) continue;
-
-          const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
-
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              fullResponse += content;
-              setResponse(fullResponse);
-            }
-          } catch {
-            textBuffer = line + "\n" + textBuffer;
-            break;
-          }
-        }
-      }
-
-      // Final flush
-      if (textBuffer.trim()) {
-        for (let raw of textBuffer.split("\n")) {
-          if (!raw) continue;
-          if (raw.endsWith("\r")) raw = raw.slice(0, -1);
-          if (raw.startsWith(":") || raw.trim() === "") continue;
-          if (!raw.startsWith("data: ")) continue;
-          const jsonStr = raw.slice(6).trim();
-          if (jsonStr === "[DONE]") continue;
-          try {
-            const parsed = JSON.parse(jsonStr);
-            const content = parsed.choices?.[0]?.delta?.content as string | undefined;
-            if (content) {
-              fullResponse += content;
-              setResponse(fullResponse);
-            }
-          } catch { /* ignore */ }
-        }
-      }
-
+      const data = await resp.json();
+      const reply = data.reply || "";
+      setResponse(reply);
       setIsLoading(false);
-      return fullResponse;
+      return reply;
 
     } catch (error) {
       console.error("Study assistant error:", error);
@@ -133,16 +106,13 @@ export function useStudyAssistant() {
     topicTitle?: string,
     courseContext?: string
   ) => {
-    return streamRequest({
-      feature: "explain",
-      aiPolicy,
-      content,
-      contentType,
-      explainMode: mode,
-      topicTitle,
+    const userMessage = buildExplainMessage(content, contentType, aiPolicy, mode, topicTitle);
+    return sendRequest(
+      [{ role: "user", content: userMessage }],
       courseContext,
-    });
-  }, [streamRequest]);
+      content.slice(0, 6000),
+    );
+  }, [sendRequest]);
 
   const generateQuestion = useCallback(async (
     content: string,
@@ -153,17 +123,13 @@ export function useStudyAssistant() {
     topicTitle?: string,
     courseContext?: string
   ) => {
-    return streamRequest({
-      feature: "exam-trainer",
-      aiPolicy,
-      content,
-      contentType,
-      questionType,
-      feedbackMode,
-      topicTitle,
+    const userMessage = buildQuestionMessage(content, contentType, questionType, topicTitle);
+    return sendRequest(
+      [{ role: "user", content: userMessage }],
       courseContext,
-    });
-  }, [streamRequest]);
+      content.slice(0, 6000),
+    );
+  }, [sendRequest]);
 
   const submitAnswer = useCallback(async (
     content: string,
@@ -173,16 +139,13 @@ export function useStudyAssistant() {
     studentAnswer: string,
     topicTitle?: string
   ) => {
-    return streamRequest({
-      feature: "exam-trainer",
-      aiPolicy,
-      content,
-      contentType,
-      previousQuestion,
-      studentAnswer,
-      topicTitle,
-    });
-  }, [streamRequest]);
+    const userMessage = buildAnswerMessage(previousQuestion, studentAnswer);
+    return sendRequest(
+      [{ role: "user", content: userMessage }],
+      undefined,
+      content.slice(0, 6000),
+    );
+  }, [sendRequest]);
 
   const reset = useCallback(() => {
     setResponse('');
