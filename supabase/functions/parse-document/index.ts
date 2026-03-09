@@ -156,11 +156,3 @@ serve(async (req) => {
     );
   }
 });
-```
-
----
-
-Na deze prompt in Lovable zou je in je server terminal moeten zien:
-```
-[PARSE] fileContent: 17788570 bytes, file: spring-w2.pptx
-[PPTX] Geëxtraheerd: 5849 tekens
