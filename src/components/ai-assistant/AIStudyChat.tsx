@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,17 +14,15 @@ import {
   Sparkles,
   GraduationCap,
   HelpCircle,
-  CheckSquare,
   List,
-  X
+  X,
+  User
 } from 'lucide-react';
 import { useStudyAssistant } from '@/hooks/useStudyAssistant';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
 
 type AIPolicy = "ALLOWED" | "LIMITED" | "FORBIDDEN";
-type ExplainMode = "simple" | "with-code" | "with-analogy";
-type QuestionType = "exam-style" | "open" | "multiple-choice";
 
 interface AIStudyChatProps {
   content: string;
@@ -35,7 +33,10 @@ interface AIStudyChatProps {
   onClose?: () => void;
 }
 
-type Mode = "explain" | "exam-trainer";
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
 export function AIStudyChat({ 
   content, 
@@ -45,61 +46,80 @@ export function AIStudyChat({
   courseContext,
   onClose 
 }: AIStudyChatProps) {
-  const [mode, setMode] = useState<Mode>("explain");
-  const [explainMode, setExplainMode] = useState<ExplainMode>("simple");
-  const [questionType, setQuestionType] = useState<QuestionType>("exam-style");
-  const [currentQuestion, setCurrentQuestion] = useState<string>("");
-  const [studentAnswer, setStudentAnswer] = useState("");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [inputValue, setInputValue] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
   
-  const { isLoading, response, explain, generateQuestion, submitAnswer, reset } = useStudyAssistant();
+  const { isLoading, response, sendRequest, reset } = useStudyAssistant();
 
-  const handleExplain = async () => {
-    await explain(content, contentType, aiPolicy, explainMode, topicTitle, courseContext);
-  };
-
-  const handleGenerateQuestion = async () => {
-    reset();
-    setStudentAnswer("");
-    const question = await generateQuestion(
-      content, 
-      contentType, 
-      aiPolicy, 
-      questionType, 
-      "with-feedback",
-      topicTitle,
-      courseContext
-    );
-    if (question) {
-      setCurrentQuestion(question);
+  // Scroll to bottom when messages change
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+  }, [chatMessages, response, isLoading]);
+
+  // When a streaming response completes, add it to chat history
+  useEffect(() => {
+    if (!isLoading && response && chatMessages.length > 0) {
+      const lastMsg = chatMessages[chatMessages.length - 1];
+      if (lastMsg.role === "user") {
+        setChatMessages(prev => [...prev, { role: "assistant", content: response }]);
+        reset();
+      }
+    }
+  }, [isLoading, response]);
+
+  const handleSend = async (messageText?: string) => {
+    const text = messageText || inputValue.trim();
+    if (!text || isLoading) return;
+    
+    setInputValue("");
+    
+    const newUserMessage: ChatMessage = { role: "user", content: text };
+    const updatedMessages = [...chatMessages, newUserMessage];
+    setChatMessages(updatedMessages);
+
+    // Build messages array for API including context
+    const apiMessages = updatedMessages.map(m => ({ role: m.role, content: m.content }));
+
+    await sendRequest(apiMessages, courseContext, content.slice(0, 6000));
   };
 
-  const handleSubmitAnswer = async () => {
-    if (!studentAnswer.trim() || !currentQuestion) return;
-    await submitAnswer(
-      content,
-      contentType,
-      aiPolicy,
-      currentQuestion,
-      studentAnswer,
-      topicTitle
-    );
+  const handleQuickAction = (action: string) => {
+    const messages: Record<string, string> = {
+      "explain-simple": `Leg het volgende materiaal uit in eenvoudige termen${topicTitle ? ` over "${topicTitle}"` : ''}:\n\n${content.slice(0, 4000)}`,
+      "explain-code": `Leg het volgende materiaal uit met code voorbeelden${topicTitle ? ` over "${topicTitle}"` : ''}:\n\n${content.slice(0, 4000)}`,
+      "explain-analogy": `Leg het volgende materiaal uit met een real-world analogie${topicTitle ? ` over "${topicTitle}"` : ''}:\n\n${content.slice(0, 4000)}`,
+      "exam-question": `Genereer een examenvraag gebaseerd op dit materiaal${topicTitle ? ` over "${topicTitle}"` : ''}:\n\n${content.slice(0, 4000)}`,
+      "multiple-choice": `Genereer een multiple choice vraag gebaseerd op dit materiaal${topicTitle ? ` over "${topicTitle}"` : ''}:\n\n${content.slice(0, 4000)}`,
+    };
+    handleSend(messages[action]);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
   };
 
   const getPolicyBadge = () => {
     switch (aiPolicy) {
       case "ALLOWED":
-        return <Badge className="bg-success text-success-foreground">Full AI Assistance</Badge>;
+        return <Badge className="bg-success text-success-foreground">Full AI</Badge>;
       case "LIMITED":
-        return <Badge className="bg-warning text-warning-foreground">Limited Assistance</Badge>;
+        return <Badge className="bg-warning text-warning-foreground">Limited</Badge>;
       case "FORBIDDEN":
         return <Badge className="bg-destructive text-destructive-foreground">Guidance Only</Badge>;
     }
   };
 
+  const hasMessages = chatMessages.length > 0;
+
   return (
     <Card className="flex flex-col h-full">
-      <CardHeader className="pb-3">
+      <CardHeader className="pb-3 flex-shrink-0">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-lg">
             <Bot className="h-5 w-5 text-primary" />
@@ -114,185 +134,148 @@ export function AIStudyChat({
             )}
           </div>
         </div>
-        
-        {/* Mode selector */}
-        <div className="flex gap-2 mt-3">
-          <Button
-            variant={mode === "explain" ? "default" : "outline"}
-            size="sm"
-            onClick={() => { setMode("explain"); reset(); }}
-            className="flex-1"
-          >
-            <Lightbulb className="h-4 w-4 mr-2" />
-            Explain
-          </Button>
-          <Button
-            variant={mode === "exam-trainer" ? "default" : "outline"}
-            size="sm"
-            onClick={() => { setMode("exam-trainer"); reset(); setCurrentQuestion(""); }}
-            className="flex-1"
-          >
-            <GraduationCap className="h-4 w-4 mr-2" />
-            Exam Trainer
-          </Button>
-        </div>
       </CardHeader>
 
       <CardContent className="flex-1 flex flex-col overflow-hidden pb-4">
-        {mode === "explain" && (
-          <>
-            {/* Explain mode options */}
-            <div className="flex gap-2 mb-4">
-              <Button
-                variant={explainMode === "simple" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setExplainMode("simple")}
-              >
-                <Sparkles className="h-3 w-3 mr-1" />
-                Simple
+        {/* Quick actions when no messages yet */}
+        {!hasMessages && !isLoading && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-4">
+            <Bot className="h-12 w-12 text-muted-foreground mb-4" />
+            <h3 className="font-medium mb-2">AI Study Assistant</h3>
+            <p className="text-sm text-muted-foreground mb-6">
+              Ask anything about this {contentType} content, or use a quick action below.
+            </p>
+            
+            <div className="grid grid-cols-2 gap-2 w-full max-w-sm">
+              <Button variant="outline" size="sm" onClick={() => handleQuickAction("explain-simple")} className="gap-1">
+                <Sparkles className="h-3 w-3" />
+                Simple Explain
               </Button>
-              <Button
-                variant={explainMode === "with-code" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setExplainMode("with-code")}
+              <Button variant="outline" size="sm" onClick={() => handleQuickAction("explain-analogy")} className="gap-1">
+                <Lightbulb className="h-3 w-3" />
+                With Analogy
+              </Button>
+              <Button 
+                variant="outline" size="sm" 
+                onClick={() => handleQuickAction("explain-code")} 
+                className="gap-1"
                 disabled={aiPolicy === "FORBIDDEN"}
               >
-                <Code className="h-3 w-3 mr-1" />
+                <Code className="h-3 w-3" />
                 With Code
               </Button>
-              <Button
-                variant={explainMode === "with-analogy" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setExplainMode("with-analogy")}
-              >
-                <Lightbulb className="h-3 w-3 mr-1" />
-                Analogy
+              <Button variant="outline" size="sm" onClick={() => handleQuickAction("exam-question")} className="gap-1">
+                <GraduationCap className="h-3 w-3" />
+                Exam Question
               </Button>
             </div>
-
-            {!response && !isLoading && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-muted/30 rounded-lg">
-                <Bot className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="font-medium mb-2">Ready to explain!</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  I'll break down this {contentType} content into simple terms.
-                  {aiPolicy === "FORBIDDEN" && " (Conceptual guidance only)"}
-                </p>
-                <Button onClick={handleExplain} disabled={isLoading}>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Explain Like I'm 12
-                </Button>
-              </div>
-            )}
-          </>
+          </div>
         )}
 
-        {mode === "exam-trainer" && (
-          <>
-            {/* Question type options */}
-            <div className="flex gap-2 mb-4">
-              <Button
-                variant={questionType === "exam-style" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setQuestionType("exam-style")}
-              >
-                <GraduationCap className="h-3 w-3 mr-1" />
-                Exam
-              </Button>
-              <Button
-                variant={questionType === "open" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setQuestionType("open")}
-              >
-                <HelpCircle className="h-3 w-3 mr-1" />
-                Open
-              </Button>
-              <Button
-                variant={questionType === "multiple-choice" ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setQuestionType("multiple-choice")}
-              >
-                <List className="h-3 w-3 mr-1" />
-                Multiple Choice
-              </Button>
-            </div>
-
-            {!currentQuestion && !isLoading && (
-              <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-muted/30 rounded-lg">
-                <GraduationCap className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="font-medium mb-2">AI Exam Trainer</h3>
-                <p className="text-sm text-muted-foreground mb-4">
-                  Practice with exam-style questions based on this {contentType} content.
-                </p>
-                <Button onClick={handleGenerateQuestion} disabled={isLoading}>
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Generate Question
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Response area */}
-        {(response || isLoading) && (
-          <ScrollArea className="flex-1 pr-4">
-            <div className="prose prose-sm max-w-none dark:prose-invert">
-              {isLoading && !response && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Thinking...
+        {/* Chat messages */}
+        {(hasMessages || isLoading) && (
+          <ScrollArea className="flex-1 pr-2" ref={scrollRef}>
+            <div className="space-y-4 pb-2">
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={cn(
+                  "flex gap-3",
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                )}>
+                  {msg.role === "assistant" && (
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Bot className="h-4 w-4 text-primary" />
+                    </div>
+                  )}
+                  <div className={cn(
+                    "rounded-lg px-3 py-2 max-w-[85%]",
+                    msg.role === "user" 
+                      ? "bg-primary text-primary-foreground" 
+                      : "bg-muted"
+                  )}>
+                    {msg.role === "assistant" ? (
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm whitespace-pre-wrap">{msg.content.length > 200 ? msg.content.slice(0, 200) + "..." : msg.content}</p>
+                    )}
+                  </div>
+                  {msg.role === "user" && (
+                    <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary flex items-center justify-center">
+                      <User className="h-4 w-4 text-primary-foreground" />
+                    </div>
+                  )}
                 </div>
-              )}
-              <ReactMarkdown>{response}</ReactMarkdown>
-              {isLoading && response && (
-                <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />
+              ))}
+
+              {/* Streaming response */}
+              {isLoading && (
+                <div className="flex gap-3 justify-start">
+                  <div className="flex-shrink-0 w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Bot className="h-4 w-4 text-primary" />
+                  </div>
+                  <div className="rounded-lg px-3 py-2 max-w-[85%] bg-muted">
+                    {response ? (
+                      <div className="prose prose-sm max-w-none dark:prose-invert">
+                        <ReactMarkdown>{response}</ReactMarkdown>
+                        <span className="inline-block w-2 h-4 bg-primary animate-pulse ml-1" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Thinking...
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </ScrollArea>
         )}
 
-        {/* Answer input for exam trainer */}
-        {mode === "exam-trainer" && currentQuestion && !isLoading && (
-          <div className="mt-4 space-y-3 border-t pt-4">
+        {/* Input area - always visible */}
+        <div className="mt-3 pt-3 border-t flex-shrink-0">
+          <div className="flex gap-2">
             <Textarea
-              placeholder="Type your answer here..."
-              value={studentAnswer}
-              onChange={(e) => setStudentAnswer(e.target.value)}
-              className="min-h-[80px] resize-none"
+              placeholder="Type your question or message..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="min-h-[44px] max-h-[120px] resize-none"
+              rows={1}
+              disabled={isLoading}
             />
-            <div className="flex gap-2">
-              <Button 
-                onClick={handleSubmitAnswer} 
-                disabled={!studentAnswer.trim()}
-                className="flex-1"
-              >
-                <Send className="h-4 w-4 mr-2" />
-                Submit Answer
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={handleGenerateQuestion}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                New Question
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Regenerate button for explain mode */}
-        {mode === "explain" && response && !isLoading && (
-          <div className="mt-4 pt-4 border-t">
             <Button 
-              variant="outline" 
-              onClick={handleExplain}
-              className="w-full"
+              onClick={() => handleSend()} 
+              disabled={!inputValue.trim() || isLoading}
+              size="icon"
+              className="flex-shrink-0 h-[44px] w-[44px]"
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Regenerate Explanation
+              <Send className="h-4 w-4" />
             </Button>
           </div>
-        )}
+          
+          {/* Quick action chips when in conversation */}
+          {hasMessages && !isLoading && (
+            <div className="flex gap-1.5 mt-2 flex-wrap">
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleQuickAction("exam-question")}>
+                <GraduationCap className="h-3 w-3" />
+                Exam Question
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => handleQuickAction("multiple-choice")}>
+                <List className="h-3 w-3" />
+                MC Question
+              </Button>
+              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => {
+                setChatMessages([]);
+                reset();
+              }}>
+                <RefreshCw className="h-3 w-3" />
+                New Chat
+              </Button>
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
