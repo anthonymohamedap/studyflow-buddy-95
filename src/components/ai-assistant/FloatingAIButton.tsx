@@ -25,6 +25,7 @@ interface FloatingAIButtonProps {
 export function FloatingAIButton({
   aiPolicy,
   courseName,
+  courseId,
   defaultContent = "",
   defaultContentType = "theory",
   defaultTopicTitle,
