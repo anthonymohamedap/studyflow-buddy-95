@@ -133,6 +133,7 @@ export function FloatingAIButton({
               aiPolicy={aiPolicy}
               topicTitle={defaultTopicTitle}
               courseContext={courseName}
+              courseId={courseId}
               onClose={() => setIsOpen(false)}
             />
           </div>
