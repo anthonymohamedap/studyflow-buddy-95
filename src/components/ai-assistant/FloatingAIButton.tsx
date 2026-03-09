@@ -16,6 +16,7 @@ type AIPolicy = "ALLOWED" | "LIMITED" | "FORBIDDEN";
 interface FloatingAIButtonProps {
   aiPolicy: AIPolicy;
   courseName?: string;
+  courseId?: string;
   defaultContent?: string;
   defaultContentType?: "theory" | "lab";
   defaultTopicTitle?: string;
@@ -24,6 +25,7 @@ interface FloatingAIButtonProps {
 export function FloatingAIButton({
   aiPolicy,
   courseName,
+  courseId,
   defaultContent = "",
   defaultContentType = "theory",
   defaultTopicTitle,
@@ -131,6 +133,7 @@ export function FloatingAIButton({
               aiPolicy={aiPolicy}
               topicTitle={defaultTopicTitle}
               courseContext={courseName}
+              courseId={courseId}
               onClose={() => setIsOpen(false)}
             />
           </div>

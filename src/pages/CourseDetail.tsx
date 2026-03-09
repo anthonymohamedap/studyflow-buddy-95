@@ -308,6 +308,7 @@ export default function CourseDetail() {
       <FloatingAIButton
         aiPolicy={course.ai_policy as "ALLOWED" | "LIMITED" | "FORBIDDEN"}
         courseName={course.name}
+        courseId={course.id}
       />
     </div>
   );
