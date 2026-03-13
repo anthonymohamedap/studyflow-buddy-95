@@ -54,6 +54,14 @@ export function DocumentOutline({
   // Extract storage path from source_url as fallback when file_path is null
   const getEffectiveFilePath = (): string | null => {
     if (filePath) return filePath;
+    // Try to extract path from Supabase storage URL
+    if (sourceUrl) {
+      const marker = '/storage/v1/object/public/course-materials/';
+      const idx = sourceUrl.indexOf(marker);
+      if (idx !== -1) {
+        return decodeURIComponent(sourceUrl.substring(idx + marker.length));
+      }
+    }
     return null;
   };
 
