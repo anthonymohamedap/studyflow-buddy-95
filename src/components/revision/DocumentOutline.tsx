@@ -13,6 +13,7 @@ interface DocumentOutlineProps {
   theoryTopicId: string;
   documentTitle: string;
   filePath?: string | null;
+  sourceUrl?: string | null;
   parsingStatus?: string;
   onParseDocument?: () => void;
 }
@@ -21,6 +22,7 @@ export function DocumentOutline({
   theoryTopicId, 
   documentTitle,
   filePath,
+  sourceUrl,
   parsingStatus,
 }: DocumentOutlineProps) {
   const { data: chapters, isLoading } = useDocumentChapters(theoryTopicId);
@@ -49,11 +51,26 @@ export function DocumentOutline({
     });
   };
 
+  // Extract storage path from source_url as fallback when file_path is null
+  const getEffectiveFilePath = (): string | null => {
+    if (filePath) return filePath;
+    // Try to extract path from Supabase storage URL
+    if (sourceUrl) {
+      const marker = '/storage/v1/object/public/course-materials/';
+      const idx = sourceUrl.indexOf(marker);
+      if (idx !== -1) {
+        return decodeURIComponent(sourceUrl.substring(idx + marker.length));
+      }
+    }
+    return null;
+  };
+
   const handleParse = () => {
-    if (!filePath) return;
+    const effectivePath = getEffectiveFilePath();
+    if (!effectivePath) return;
     parseDocument.mutate({
       theoryTopicId,
-      filePath,
+      filePath: effectivePath,
       documentTitle,
     });
   };
@@ -81,7 +98,7 @@ export function DocumentOutline({
       return (
         <div className="space-y-3 py-4">
           <p className="text-sm text-destructive">Failed to parse document. Please try again.</p>
-          <Button size="sm" onClick={handleParse} disabled={!filePath}>
+          <Button size="sm" onClick={handleParse} disabled={!getEffectiveFilePath()}>
             <Sparkles className="h-4 w-4 mr-2" />
             Retry Analysis
           </Button>
@@ -97,7 +114,7 @@ export function DocumentOutline({
         <Button 
           size="sm" 
           onClick={handleParse} 
-          disabled={!filePath || parseDocument.isPending}
+          disabled={!getEffectiveFilePath() || parseDocument.isPending}
         >
           <Sparkles className="h-4 w-4 mr-2" />
           Analyze Document
