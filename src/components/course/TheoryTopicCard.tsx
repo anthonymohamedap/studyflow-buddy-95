@@ -226,6 +226,7 @@ export function TheoryTopicCard({ topic, onStatusChange, onDelete, onUpdate }: T
                         theoryTopicId={topic.id}
                         documentTitle={topic.title}
                         filePath={topic.file_path}
+                        sourceUrl={topic.source_url}
                         parsingStatus={topic.parsing_status || 'pending'}
                       />
                   </div>
