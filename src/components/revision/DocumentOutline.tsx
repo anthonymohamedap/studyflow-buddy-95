@@ -98,7 +98,7 @@ export function DocumentOutline({
       return (
         <div className="space-y-3 py-4">
           <p className="text-sm text-destructive">Failed to parse document. Please try again.</p>
-          <Button size="sm" onClick={handleParse} disabled={!filePath}>
+          <Button size="sm" onClick={handleParse} disabled={!getEffectiveFilePath()}>
             <Sparkles className="h-4 w-4 mr-2" />
             Retry Analysis
           </Button>
