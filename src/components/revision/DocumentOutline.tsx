@@ -114,7 +114,7 @@ export function DocumentOutline({
         <Button 
           size="sm" 
           onClick={handleParse} 
-          disabled={!filePath || parseDocument.isPending}
+          disabled={!getEffectiveFilePath() || parseDocument.isPending}
         >
           <Sparkles className="h-4 w-4 mr-2" />
           Analyze Document
